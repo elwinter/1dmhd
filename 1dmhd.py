@@ -5,6 +5,8 @@
 This program will use a set of neural networks to solve the coupled partial
 differential equations of one-dimensional ideal MHD.
 
+This code uses the trial function method.
+
 This code assumes Bx is constant, and so the gradient of Bx is 0.
 
 Author
