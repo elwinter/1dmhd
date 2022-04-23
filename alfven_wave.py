@@ -39,7 +39,7 @@ By_1  = 0.0
 Bz_1  = 0.0
 P_1   = 1.0e-9
 
-# Position of start andN end of initial vy perturbation.
+# Position of start and end of initial vy perturbation.
 perturbation_x0 = 0.45
 perturbation_x1 = 0.55
 

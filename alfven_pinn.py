@@ -48,16 +48,16 @@ system_information_file = "system_information.txt"
 # Name of hyperparameter record file.
 hyperparameter_file = "hyperparameters.py"
 
-# Name of optimizer used for training.
-optimizer_name = "Adam"
+# # Name of optimizer used for training.
+# optimizer_name = "Adam"
 
 # Initial parameter ranges
 w0_range = [-0.1, 0.1]
 u0_range = [-0.1, 0.1]
 v0_range = [-0.1, 0.1]
 
-# Number of dimensions
-m = 2
+# # Number of dimensions
+# m = 2
 
 # Default random number generator seed.
 default_random_seed = 0
@@ -316,7 +316,18 @@ def create_training_data(nx_train, nt_train):
         Array of [x, t] points.
     """
     xt_train = np.array(create_training_grid2([nx_train, nt_train]), dtype="float32")
-    return xt_train
+
+    # Now split the training data into two groups - inside the BC, and on the BC.
+    mask = np.ones(len(xt_train), dtype=bool)
+    mask[:nx_train] = False
+    mask[-nx_train:] = False
+    mask[::nx_train] = False
+    # Keep t=1 inside.
+    # mask[nt_train - 1::nx_train] = False
+    xt_inside = xt_train[mask]
+    mask = np.logical_not(mask)
+    xt_bc = xt_train[mask]
+    return xt_train, xt_inside, xt_bc
 
 
 def build_model(H):
@@ -350,7 +361,7 @@ def build_model(H):
     return model
 
 
-# Define the differential equations using TensorFlow operations.
+# # Define the differential equations using TensorFlow operations.
 
 # These equations are taken from:
 
@@ -365,7 +376,7 @@ def build_model(H):
 
 #     dU/dt + dF/dx = 0
 
-#     U = (rho, rho*vx, rho*vy, rho*vz, Bx, By, Bz, E)
+#     U = (rho, rho*vx, rho*vy, rho*vz, By, Bz, E)
 
 #           / rho*vx                       \
 #          |  rho*vx**2 + Ptot - Bx**2      |
@@ -380,16 +391,16 @@ def build_model(H):
 #     P = (gamma - 1)*(E - rho*v**2/2 - B**2/2)
 
 # xt is the list of tf.Variable [x, t].
-# Y is the list of tf.Variable [rho, vx, vy, vz, Bx, By, Bz, E]
-# del_Y is the list of gradients [del_rho, del_vx, del_vy, del_vz, del_Bx, del_By, del_Bz, del_p]
+# Y is the list of tf.Variable [rho, vx, vy, vz, By, Bz, E]
+# del_Y is the list of gradients [del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P]
 
 # @tf.function
 def pde_rho(xt, Y, del_Y):
     """Differential equation for rho."""
     x = xt[:, 0]
     t = xt[:, 1]
-    (rho, vx, vy, vz, Bx, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_Bx, del_By, del_Bz, del_P) = del_Y
+    (rho, vx, vy, vz, By, Bz, P) = Y
+    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
     drho_dx = del_rho[:, 0]
     drho_dt = del_rho[:, 1]
     dvx_dx  =  del_vx[:, 0]
@@ -401,13 +412,14 @@ def pde_vx(xt, Y, del_Y):
     """Differential equation for vx."""
     x = xt[:, 0]
     t = xt[:, 1]
-    (rho, vx, vy, vz, Bx, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_Bx, del_By, del_Bz, del_P) = del_Y
+    (rho, vx, vy, vz, By, Bz, P) = Y
+    Bx = p.Bx_0
+    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
     drho_dx = del_rho[:, 0]
     drho_dt = del_rho[:, 1]
     dvx_dx  =  del_vx[:, 0]
     dvx_dt  =  del_vx[:, 1]
-    dBx_dx  =  del_Bx[:, 0]
+    dBx_dx  =  0
     dBy_dx  =  del_By[:, 0]
     dBz_dx  =  del_Bz[:, 0]
     dP_dx   =   del_P[:, 0]
@@ -423,14 +435,15 @@ def pde_vy(xt, Y, del_Y):
     """Differential equation for vy."""
     x = xt[:, 0]
     t = xt[:, 1]
-    (rho, vx, vy, vz, Bx, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_Bx, del_By, del_Bz, del_P) = del_Y
+    (rho, vx, vy, vz, By, Bz, P) = Y
+    Bx = p.Bx_0
+    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
     drho_dx = del_rho[:, 0]
     drho_dt = del_rho[:, 1]
     dvx_dx  =  del_vx[:, 0]
     dvy_dx  =  del_vy[:, 0]
     dvy_dt  =  del_vy[:, 1]
-    dBx_dx  =  del_Bx[:, 0]
+    dBx_dx  =  0
     dBy_dx  =  del_By[:, 0]
     G = (
         rho*dvy_dt + drho_dt*vy
@@ -444,14 +457,15 @@ def pde_vz(xt, Y, del_Y):
     """Differential equation for vz."""
     x = xt[:, 0]
     t = xt[:, 1]
-    (rho, vx, vy, vz, Bx, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_Bx, del_By, del_Bz, del_P) = del_Y
+    (rho, vx, vy, vz, By, Bz, P) = Y
+    Bx = p.Bx_0
+    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
     drho_dx = del_rho[:, 0]
     drho_dt = del_rho[:, 1]
     dvx_dx  =  del_vx[:, 0]
     dvz_dx  =  del_vz[:, 0]
     dvz_dt  =  del_vz[:, 1]
-    dBx_dx  =  del_Bx[:, 0]
+    dBx_dx  =  0
     dBz_dx  =  del_Bz[:, 0]
     G = (
         rho*dvz_dt + drho_dt*vz
@@ -461,21 +475,16 @@ def pde_vz(xt, Y, del_Y):
     return G
 
 # @tf.function
-def pde_Bx(xt, Y, del_Y):
-    """Differential equation for Bx."""
-    G = tf.constant(0, shape=(xt.shape[0],), dtype="float32")
-    return G
-
-# @tf.function
 def pde_By(xt, Y, del_Y):
     """Differential equation for By."""
     x = xt[:, 0]
     t = xt[:, 1]
-    (rho, vx, vy, vz, Bx, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_Bx, del_By, del_Bz, del_P) = del_Y
+    (rho, vx, vy, vz, By, Bz, P) = Y
+    Bx = p.Bx_0
+    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
     dvx_dx = del_vx[:, 0]
     dvy_dx = del_vy[:, 0]
-    dBx_dx = del_Bx[:, 0]
+    dBx_dx = 0
     dBy_dx = del_By[:, 0]
     dBy_dt = del_By[:, 1]
     G = dBy_dt + By*dvx_dx + dBy_dx*vx - Bx*dvy_dx - dBx_dx*vy
@@ -486,11 +495,12 @@ def pde_Bz(xt, Y, del_Y):
     """Differential equation for Bz."""
     x = xt[:, 0]
     t = xt[:, 1]
-    (rho, vx, vy, vz, Bx, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_Bx, del_By, del_Bz, del_P) = del_Y
+    (rho, vx, vy, vz, By, Bz, P) = Y
+    Bx = p.Bx_0
+    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
     dvx_dx  = del_vx[:, 0]
     dvz_dx  = del_vz[:, 0]
-    dBx_dx  = del_Bx[:, 0]
+    dBx_dx  = 0
     dBz_dx  = del_Bz[:, 0]
     dBz_dt  = del_Bz[:, 1]
     G = dBz_dt + Bz*dvx_dx + dBz_dx*vx - Bx*dvz_dx - dBx_dx*vz
@@ -501,8 +511,9 @@ def pde_P(xt, Y, del_Y):
     """Differential equation for P (actually E)."""
     x = xt[:, 0]
     t = xt[:, 1]
-    (rho, vx, vy, vz, Bx, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_Bx, del_By, del_Bz, del_P) = del_Y
+    (rho, vx, vy, vz, By, Bz, P) = Y
+    Bx = p.Bx_0
+    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
     drho_dx  = del_rho[:, 0]
     drho_dt  = del_rho[:, 1]
     dvx_dx   =  del_vx[:, 0]
@@ -511,8 +522,8 @@ def pde_P(xt, Y, del_Y):
     dvy_dt   =  del_vy[:, 1]
     dvz_dx   =  del_vz[:, 0]
     dvz_dt   =  del_vz[:, 1]
-    dBx_dx   =  del_Bx[:, 0]
-    dBx_dt   =  del_Bx[:, 1]
+    dBx_dx   =  0
+    dBx_dt   =  0
     dBy_dx   =  del_By[:, 0]
     dBy_dt   =  del_By[:, 1]
     dBz_dx   =  del_Bz[:, 0]
@@ -546,115 +557,115 @@ def pde_P(xt, Y, del_Y):
     return G
 
 
-# Define the trial functions.
+# # Define the trial functions.
 
 # Placeholders for boundary coordinate pairs.
 x0t = None
 x1t = None
 
-# @tf.function
-def Ytrial_rho(xt, N):
-    """Trial solution for rho."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_rho
-    f1 = p.f1_rho
-    g0 = p.g0_rho
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
+# # @tf.function
+# def Ytrial_rho(xt, N):
+#     """Trial solution for rho."""
+#     x = xt[:, 0]
+#     t = xt[:, 1]
+#     f0 = p.f0_rho
+#     f1 = p.f1_rho
+#     g0 = p.g0_rho
+#     A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
+#     P = x*(1 - x)*t
+#     Y = A + P*N[:, 0]
+#     return Y
 
-# @tf.function
-def Ytrial_vx(xt, N):
-    """Trial solution for vx."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_vx
-    f1 = p.f1_vx
-    g0 = p.g0_vx
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
+# # @tf.function
+# def Ytrial_vx(xt, N):
+#     """Trial solution for vx."""
+#     x = xt[:, 0]
+#     t = xt[:, 1]
+#     f0 = p.f0_vx
+#     f1 = p.f1_vx
+#     g0 = p.g0_vx
+#     A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
+#     P = x*(1 - x)*t
+#     Y = A + P*N[:, 0]
+#     return Y
 
-# @tf.function
-def Ytrial_vy(xt, N):
-    """Trial solution for vy."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_vy
-    f1 = p.f1_vy
-    g0 = p.g0_vy
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
+# # @tf.function
+# def Ytrial_vy(xt, N):
+#     """Trial solution for vy."""
+#     x = xt[:, 0]
+#     t = xt[:, 1]
+#     f0 = p.f0_vy
+#     f1 = p.f1_vy
+#     g0 = p.g0_vy
+#     A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
+#     P = x*(1 - x)*t
+#     Y = A + P*N[:, 0]
+#     return Y
 
-# @tf.function
-def Ytrial_vz(xt, N):
-    """Trial solution for vz."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_vz
-    f1 = p.f1_vz
-    g0 = p.g0_vz
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
+# # @tf.function
+# def Ytrial_vz(xt, N):
+#     """Trial solution for vz."""
+#     x = xt[:, 0]
+#     t = xt[:, 1]
+#     f0 = p.f0_vz
+#     f1 = p.f1_vz
+#     g0 = p.g0_vz
+#     A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
+#     P = x*(1 - x)*t
+#     Y = A + P*N[:, 0]
+#     return Y
 
-# @tf.function
-def Ytrial_Bx(xt, N):
-    """Trial solution for Bx."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_Bx
-    f1 = p.f1_Bx
-    g0 = p.g0_Bx
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
+# # @tf.function
+# def Ytrial_Bx(xt, N):
+#     """Trial solution for Bx."""
+#     x = xt[:, 0]
+#     t = xt[:, 1]
+#     f0 = p.f0_Bx
+#     f1 = p.f1_Bx
+#     g0 = p.g0_Bx
+#     A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
+#     P = x*(1 - x)*t
+#     Y = A + P*N[:, 0]
+#     return Y
 
-# @tf.function
-def Ytrial_By(xt, N):
-    """Trial solution for By."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_By
-    f1 = p.f1_By
-    g0 = p.g0_By
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
+# # @tf.function
+# def Ytrial_By(xt, N):
+#     """Trial solution for By."""
+#     x = xt[:, 0]
+#     t = xt[:, 1]
+#     f0 = p.f0_By
+#     f1 = p.f1_By
+#     g0 = p.g0_By
+#     A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
+#     P = x*(1 - x)*t
+#     Y = A + P*N[:, 0]
+#     return Y
 
-# @tf.function
-def Ytrial_Bz(xt, N):
-    """Trial solution for Bz."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_Bz
-    f1 = p.f1_Bz
-    g0 = p.g0_Bz
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
+# # @tf.function
+# def Ytrial_Bz(xt, N):
+#     """Trial solution for Bz."""
+#     x = xt[:, 0]
+#     t = xt[:, 1]
+#     f0 = p.f0_Bz
+#     f1 = p.f1_Bz
+#     g0 = p.g0_Bz
+#     A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
+#     P = x*(1 - x)*t
+#     Y = A + P*N[:, 0]
+#     return Y
 
-# @tf.function
-def Ytrial_P(xt, N):
-    """Trial solution for P."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_P
-    f1 = p.f1_P
-    g0 = p.g0_P
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
+# # @tf.function
+# def Ytrial_P(xt, N):
+#     """Trial solution for P."""
+#     x = xt[:, 0]
+#     t = xt[:, 1]
+#     f0 = p.f0_P
+#     f1 = p.f1_P
+#     g0 = p.g0_P
+#     A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
+#     P = x*(1 - x)*t
+#     Y = A + P*N[:, 0]
+#     return Y
 
 
 def main():
@@ -671,7 +682,6 @@ def main():
     H = args.n_hid
     nt_train = args.nt_train
     nx_train = args.nx_train
-    n_train = nx_train*nt_train
     random_seed = args.seed
     problem = args.problem
     tol = args.tolerance
@@ -690,25 +700,59 @@ def main():
     save_hyperparameters(output_dir, args)
 
     # Create and save the training data.
-    xt_train = create_training_data(nx_train, nt_train)
+    xt_train, xt_train_in, xt_train_bc = create_training_data(nx_train, nt_train)
+    n_train = len(xt_train)
+    n_in = len(xt_train_in)
+    n_bc = len(xt_train_bc)
     np.savetxt(os.path.join(output_dir, "xt_train.dat"), xt_train)
 
-    # Create copies of the training data with all x = 0.
-    x0t_train = xt_train.copy()
-    x0t_train[:, 0] = 0
-    np.savetxt(os.path.join(output_dir, "x0t_train.dat"), x0t_train)
-
-    # Create copies of the training data with all x = 1.
-    x1t_train = xt_train.copy()
-    x1t_train[:, 0] = 1
-    np.savetxt(os.path.join(output_dir, "x1t_train.dat"), x1t_train)
+    # Compute the boundary condition values.
+    rho_bc = np.zeros(n_bc)
+    vx_bc = np.zeros(n_bc)
+    vy_bc = np.zeros(n_bc)
+    vz_bc = np.zeros(n_bc)
+    By_bc = np.zeros(n_bc)
+    Bz_bc = np.zeros(n_bc)
+    P_bc = np.zeros(n_bc)
+    for i in range(n_bc):
+        xt = xt_train_bc[i]
+        if xt[0] == 0:
+            rho_bc[i] = p.rho_0
+            vx_bc[i]  = p.vx_0
+            vy_bc[i]  = p.vy_0
+            vz_bc[i]  = p.vz_0
+            By_bc[i]  = p.By_0
+            Bz_bc[i]  = p.Bz_0
+            P_bc[i]   = p.P_0
+        elif xt[0] == 1:
+            rho_bc[i] = p.rho_1
+            vx_bc[i]  = p.vx_1
+            vy_bc[i]  = p.vy_0
+            vz_bc[i]  = p.vz_1
+            By_bc[i]  = p.By_1
+            Bz_bc[i]  = p.Bz_1
+            P_bc[i]   = p.P_1
+        elif xt[1] == 0:
+            rho_bc[i] = p.rho_0
+            vx_bc[i]  = p.vx_0
+            vy_bc[i]  = p.vy_1
+            vz_bc[i]  = p.vz_0
+            By_bc[i]  = p.By_0
+            Bz_bc[i]  = p.Bz_0
+            P_bc[i]   = p.P_0
+    rho_bc = tf.Variable(rho_bc, dtype="float32")
+    vx_bc = tf.Variable(vx_bc, dtype="float32")
+    vy_bc = tf.Variable(vy_bc, dtype="float32")
+    vz_bc = tf.Variable(vz_bc, dtype="float32")
+    By_bc = tf.Variable(By_bc, dtype="float32")
+    Bz_bc = tf.Variable(Bz_bc, dtype="float32")
+    P_bc = tf.Variable(P_bc, dtype="float32")
 
     # Build the models.
     model_rho = build_model(H)
     model_vx  = build_model(H)
     model_vy  = build_model(H)
     model_vz  = build_model(H)
-    model_Bx  = build_model(H)
     model_By  = build_model(H)
     model_Bz  = build_model(H)
     model_P   = build_model(H)
@@ -718,7 +762,6 @@ def main():
     optimizer_vx  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     optimizer_vy  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     optimizer_vz  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    optimizer_Bx  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     optimizer_By  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     optimizer_Bz  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     optimizer_P   = tf.keras.optimizers.Adam(learning_rate=learning_rate)
@@ -730,7 +773,6 @@ def main():
     losses_vx  = []
     losses_vy  = []
     losses_vz  = []
-    losses_Bx  = []
     losses_By  = []
     losses_Bz  = []
     losses_P   = []
@@ -740,7 +782,6 @@ def main():
     phist_vx  = []
     phist_vy  = []
     phist_vz  = []
-    phist_Bx  = []
     phist_By  = []
     phist_Bz  = []
     phist_P   = []
@@ -751,11 +792,10 @@ def main():
     # Rename the training data Variables for convenience.
     xt_train_var = tf.Variable(xt_train)
     xt = xt_train_var
-    x0t_train_var = tf.Variable(x0t_train)
-    global x0t, x1t
-    x0t = x0t_train_var
-    x1t_train_var = tf.Variable(x1t_train)
-    x1t = x1t_train_var
+    xt_train_in_var = tf.Variable(xt_train_in)
+    xt_in = xt_train_in_var
+    xt_train_bc_var = tf.Variable(xt_train_bc)
+    xt_bc = xt_train_bc_var
 
     # Clear the convergence flag to start.
     converged = False
@@ -769,215 +809,237 @@ def main():
         with tf.GradientTape(persistent=True) as tape1:
             with tf.GradientTape(persistent=True) as tape0:
 
-                # Compute the network outputs at the training points.
-                N_rho = model_rho(xt)
-                N_vx  = model_vx( xt)
-                N_vy  = model_vy( xt)
-                N_vz  = model_vz( xt)
-                N_Bx  = model_Bx( xt)
-                N_By  = model_By( xt)
-                N_Bz  = model_Bz( xt)
-                N_P   = model_P(  xt)
+                # Compute the network outputs at the interior training points.
+                rho_in = model_rho(xt_in)
+                vx_in  = model_vx( xt_in)
+                vy_in  = model_vy( xt_in)
+                vz_in  = model_vz( xt_in)
+                By_in  = model_By( xt_in)
+                Bz_in  = model_Bz( xt_in)
+                P_in   = model_P(  xt_in)
 
-                # Compute the trial solutions.
-                rho = Ytrial_rho(xt, N_rho)
-                vx  = Ytrial_vx( xt, N_vx)
-                vy  = Ytrial_vy( xt, N_vy)
-                vz  = Ytrial_vz( xt, N_vz)
-                Bx  = Ytrial_Bx( xt, N_Bx)
-                By  = Ytrial_By( xt, N_By)
-                Bz  = Ytrial_Bz( xt, N_Bz)
-                P   = Ytrial_P(  xt, N_P)
+                # Compute the network outputs on the boundaries.
+                rho_bcm = model_rho(xt_bc)
+                vx_bcm  = model_vx( xt_bc)
+                vy_bcm  = model_vy( xt_bc)
+                vz_bcm  = model_vz( xt_bc)
+                By_bcm  = model_By( xt_bc)
+                Bz_bcm  = model_Bz( xt_bc)
+                P_bcm   = model_P(  xt_bc)
 
-            # Compute the gradients of the trial solutions wrt inputs.
-            del_rho = tape0.gradient(rho, xt)
-            del_vx  = tape0.gradient(vx,  xt)
-            del_vy  = tape0.gradient(vy,  xt)
-            del_vz  = tape0.gradient(vz,  xt)
-            del_Bx  = tape0.gradient(Bx,  xt)
-            del_By  = tape0.gradient(By,  xt)
-            del_Bz  = tape0.gradient(Bz,  xt)
-            del_P   = tape0.gradient(P,   xt)
+            # Compute the gradients of the trial solutions wrt inputs at the interior training points.
+            del_rho_in = tape0.gradient(rho_in, xt_in)
+            del_vx_in  = tape0.gradient(vx_in,  xt_in)
+            del_vy_in  = tape0.gradient(vy_in,  xt_in)
+            del_vz_in  = tape0.gradient(vz_in,  xt_in)
+            del_By_in  = tape0.gradient(By_in,  xt_in)
+            del_Bz_in  = tape0.gradient(Bz_in,  xt_in)
+            del_P_in   = tape0.gradient(P_in,   xt_in)
 
-            # Compute the estimates of the differential equations.
-            Y = [rho, vx, vy, vz, Bx, By, Bz, P]
-            del_Y = [del_rho, del_vx, del_vy, del_vz, del_Bx, del_By, del_Bz, del_P]
-            G_rho = pde_rho(xt, Y, del_Y)
-            G_vx  =  pde_vx(xt, Y, del_Y)
-            G_vy  =  pde_vy(xt, Y, del_Y)
-            G_vz  =  pde_vz(xt, Y, del_Y)
-            G_Bx  =  pde_Bx(xt, Y, del_Y)
-            G_By  =  pde_By(xt, Y, del_Y)
-            G_Bz  =  pde_Bz(xt, Y, del_Y)
-            G_P   =   pde_P(xt, Y, del_Y)
+            # Compute the estimates of the differential equations at the interior training points.
+            Y_in = [rho_in, vx_in, vy_in, vz_in, By_in, Bz_in, P_in]
+            del_Y_in = [del_rho_in, del_vx_in, del_vy_in, del_vz_in, del_By_in, del_Bz_in, del_P_in]
+            G_rho_in = pde_rho(xt_in, Y_in, del_Y_in)
+            G_vx_in  = pde_vx( xt_in, Y_in, del_Y_in)
+            G_vy_in  =  pde_vy(xt_in, Y_in, del_Y_in)
+            G_vz_in  =  pde_vz(xt_in, Y_in, del_Y_in)
+            G_By_in  =  pde_By(xt_in, Y_in, del_Y_in)
+            G_Bz_in  =  pde_Bz(xt_in, Y_in, del_Y_in)
+            G_P_in   =   pde_P(xt_in, Y_in, del_Y_in)
 
-            # Compute the loss functions.
-            L_rho = tf.math.sqrt(tf.reduce_sum(G_rho**2)/n_train)
-            L_vx  = tf.math.sqrt(tf.reduce_sum(G_vx**2) /n_train)
-            L_vy  = tf.math.sqrt(tf.reduce_sum(G_vy**2) /n_train)
-            L_vz  = tf.math.sqrt(tf.reduce_sum(G_vz**2) /n_train)
-            L_Bx  = tf.math.sqrt(tf.reduce_sum(G_Bx**2) /n_train)
-            L_By  = tf.math.sqrt(tf.reduce_sum(G_By**2) /n_train)
-            L_Bz  = tf.math.sqrt(tf.reduce_sum(G_Bz**2) /n_train)
-            L_P   = tf.math.sqrt(tf.reduce_sum(G_P**2)  /n_train)
-            L = L_rho + L_vx + L_vy + L_vz + L_Bx + L_By + L_Bz + L_P
+            # Compute the errors in the computed BC.
+            E_rho_bc = rho_bcm - rho_bc
+            E_vx_bc = vx_bcm - vx_bc
+            E_vy_bc = vy_bcm - vy_bc
+            E_vz_bc = vz_bcm - vz_bc
+            E_By_bc = By_bcm - By_bc
+            E_Bz_bc = Bz_bcm - Bz_bc
+            E_P_bc = P_bcm - P_bc
+
+            # Compute the loss functions for the interior training points.
+            L_rho_in = tf.math.sqrt(tf.reduce_sum(G_rho_in**2)/n_in)
+            L_vx_in  = tf.math.sqrt(tf.reduce_sum(G_vx_in**2) /n_in)
+            L_vy_in  = tf.math.sqrt(tf.reduce_sum(G_vy_in**2) /n_in)
+            L_vz_in  = tf.math.sqrt(tf.reduce_sum(G_vz_in**2) /n_in)
+            L_By_in  = tf.math.sqrt(tf.reduce_sum(G_By_in**2) /n_in)
+            L_Bz_in  = tf.math.sqrt(tf.reduce_sum(G_Bz_in**2) /n_in)
+            L_P_in   = tf.math.sqrt(tf.reduce_sum(G_P_in**2)  /n_in)
+            L_in = L_rho_in + L_vx_in + L_vy_in + L_vz_in + L_By_in + L_Bz_in + L_P_in
+
+            # Compute the loss functions for the boundary points.
+            L_rho_bc = tf.math.sqrt(tf.reduce_sum(E_rho_bc**2)/n_bc)
+            L_vx_bc  = tf.math.sqrt(tf.reduce_sum(E_vx_bc**2) /n_bc)
+            L_vy_bc  = tf.math.sqrt(tf.reduce_sum(E_vy_bc**2) /n_bc)
+            L_vz_bc  = tf.math.sqrt(tf.reduce_sum(E_vz_bc**2) /n_bc)
+            L_By_bc  = tf.math.sqrt(tf.reduce_sum(E_By_bc**2) /n_bc)
+            L_Bz_bc  = tf.math.sqrt(tf.reduce_sum(E_Bz_bc**2) /n_bc)
+            L_P_bc   = tf.math.sqrt(tf.reduce_sum(E_P_bc**2)  /n_bc)
+            L_bc = L_rho_bc + L_vx_bc + L_vy_bc + L_vz_bc + L_By_bc + L_Bz_bc + L_P_bc
+
+            # Compute the total losses.
+            L_rho = L_rho_in + L_rho_bc
+            L_vx = L_vx_in + L_vx_bc
+            L_vy = L_vy_in + L_vy_bc
+            L_vz = L_vz_in + L_vz_bc
+            L_By = L_By_in + L_By_bc
+            L_Bz = L_Bz_in + L_Bz_bc
+            L_P = L_P_in + L_P_bc
+            L = L_in + L_bc
 
         # Save the current losses.
         losses_rho.append(L_rho.numpy())
         losses_vx.append( L_vx.numpy())
         losses_vy.append( L_vy.numpy())
         losses_vz.append( L_vz.numpy())
-        losses_Bx.append( L_Bx.numpy())
         losses_By.append( L_By.numpy())
         losses_Bz.append( L_Bz.numpy())
         losses_P.append(  L_P.numpy())
         losses.append(    L.numpy())
 
-        # Check for convergence.
-        if epoch > 1:
-            loss_delta = losses[-1] - losses[-2]
-            if abs(loss_delta) <= tol:
-                converged = True
-                break
+    #     # Check for convergence.
+    #     if epoch > 1:
+    #         loss_delta = losses[-1] - losses[-2]
+    #         if abs(loss_delta) <= tol:
+    #             converged = True
+    #             break
 
         # Compute the gradient of the loss function wrt the network parameters.
         pgrad_rho = tape1.gradient(L, model_rho.trainable_variables)
         pgrad_vx  = tape1.gradient(L,  model_vx.trainable_variables)
         pgrad_vy  = tape1.gradient(L,  model_vy.trainable_variables)
         pgrad_vz  = tape1.gradient(L,  model_vz.trainable_variables)
-        pgrad_Bx  = tape1.gradient(L,  model_Bx.trainable_variables)
         pgrad_By  = tape1.gradient(L,  model_By.trainable_variables)
         pgrad_Bz  = tape1.gradient(L,  model_Bz.trainable_variables)
         pgrad_P   = tape1.gradient(L,   model_P.trainable_variables)
 
-        # Save the parameters used in this epoch.
-        phist_rho.append(
-            np.hstack(
-                (model_rho.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_rho.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_rho.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
-        phist_vx.append(
-            np.hstack(
-                (model_vx.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_vx.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_vx.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
-        phist_vy.append(
-            np.hstack(
-                (model_vy.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_vy.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_vy.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
-        phist_vz.append(
-            np.hstack(
-                (model_vz.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_vz.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_vz.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
-        phist_Bx.append(
-            np.hstack(
-                (model_Bx.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_Bx.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_Bx.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
-        phist_By.append(
-            np.hstack(
-                (model_By.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_By.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_By.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
-        phist_Bz.append(
-            np.hstack(
-                (model_Bz.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_Bz.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_Bz.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
-        phist_P.append(
-            np.hstack(
-                (model_P.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_P.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_P.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
+    #     # Save the parameters used in this epoch.
+    #     phist_rho.append(
+    #         np.hstack(
+    #             (model_rho.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #              model_rho.trainable_variables[1].numpy(),       # u (H,) row vector
+    #              model_rho.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #         )
+    #     )
+    #     phist_vx.append(
+    #         np.hstack(
+    #             (model_vx.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #              model_vx.trainable_variables[1].numpy(),       # u (H,) row vector
+    #              model_vx.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #         )
+    #     )
+    #     phist_vy.append(
+    #         np.hstack(
+    #             (model_vy.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #              model_vy.trainable_variables[1].numpy(),       # u (H,) row vector
+    #              model_vy.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #         )
+    #     )
+    #     phist_vz.append(
+    #         np.hstack(
+    #             (model_vz.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #              model_vz.trainable_variables[1].numpy(),       # u (H,) row vector
+    #              model_vz.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #         )
+    #     )
+    #     phist_Bx.append(
+    #         np.hstack(
+    #             (model_Bx.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #              model_Bx.trainable_variables[1].numpy(),       # u (H,) row vector
+    #              model_Bx.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #         )
+    #     )
+    #     phist_By.append(
+    #         np.hstack(
+    #             (model_By.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #              model_By.trainable_variables[1].numpy(),       # u (H,) row vector
+    #              model_By.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #         )
+    #     )
+    #     phist_Bz.append(
+    #         np.hstack(
+    #             (model_Bz.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #              model_Bz.trainable_variables[1].numpy(),       # u (H,) row vector
+    #              model_Bz.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #         )
+    #     )
+    #     phist_P.append(
+    #         np.hstack(
+    #             (model_P.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #              model_P.trainable_variables[1].numpy(),       # u (H,) row vector
+    #              model_P.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #         )
+    #     )
 
         # Update the parameters for this epoch.
         optimizer_rho.apply_gradients(zip(pgrad_rho, model_rho.trainable_variables))
         optimizer_vx.apply_gradients(zip( pgrad_vx,   model_vx.trainable_variables))
         optimizer_vy.apply_gradients(zip( pgrad_vy,   model_vy.trainable_variables))
         optimizer_vz.apply_gradients(zip( pgrad_vz,   model_vz.trainable_variables))
-        optimizer_Bx.apply_gradients(zip( pgrad_Bx,   model_Bx.trainable_variables))
         optimizer_By.apply_gradients(zip( pgrad_By,   model_By.trainable_variables))
         optimizer_Bz.apply_gradients(zip( pgrad_Bz,   model_Bz.trainable_variables))
         optimizer_P.apply_gradients( zip( pgrad_P,     model_P.trainable_variables))
 
         if epoch % 1 == 0:
+            # print("Ending epoch %s" % (epoch))
             print("Ending epoch %s, loss function = %f" % (epoch, L.numpy()))
 
-    # Save the parameters used in the last epoch.
-    phist_rho.append(
-        np.hstack(
-            (model_rho.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_rho.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_rho.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
-    phist_vx.append(
-        np.hstack(
-            (model_vx.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_vx.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_vx.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
-    phist_vy.append(
-        np.hstack(
-            (model_vy.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_vy.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_vy.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
-    phist_vz.append(
-        np.hstack(
-            (model_vz.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_vz.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_vz.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
-    phist_Bx.append(
-        np.hstack(
-            (model_Bx.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_Bx.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_Bx.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
-    phist_By.append(
-        np.hstack(
-            (model_By.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_By.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_By.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
-    phist_Bz.append(
-        np.hstack(
-            (model_Bz.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_Bz.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_Bz.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
-    phist_P.append(
-        np.hstack(
-            (model_P.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_P.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_P.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
+    # # Save the parameters used in the last epoch.
+    # phist_rho.append(
+    #     np.hstack(
+    #         (model_rho.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #          model_rho.trainable_variables[1].numpy(),       # u (H,) row vector
+    #          model_rho.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #     )
+    # )
+    # phist_vx.append(
+    #     np.hstack(
+    #         (model_vx.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #          model_vx.trainable_variables[1].numpy(),       # u (H,) row vector
+    #          model_vx.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #     )
+    # )
+    # phist_vy.append(
+    #     np.hstack(
+    #         (model_vy.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #          model_vy.trainable_variables[1].numpy(),       # u (H,) row vector
+    #          model_vy.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #     )
+    # )
+    # phist_vz.append(
+    #     np.hstack(
+    #         (model_vz.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #          model_vz.trainable_variables[1].numpy(),       # u (H,) row vector
+    #          model_vz.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #     )
+    # )
+    # phist_Bx.append(
+    #     np.hstack(
+    #         (model_Bx.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #          model_Bx.trainable_variables[1].numpy(),       # u (H,) row vector
+    #          model_Bx.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #     )
+    # )
+    # phist_By.append(
+    #     np.hstack(
+    #         (model_By.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #          model_By.trainable_variables[1].numpy(),       # u (H,) row vector
+    #          model_By.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #     )
+    # )
+    # phist_Bz.append(
+    #     np.hstack(
+    #         (model_Bz.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #          model_Bz.trainable_variables[1].numpy(),       # u (H,) row vector
+    #          model_Bz.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #     )
+    # )
+    # phist_P.append(
+    #     np.hstack(
+    #         (model_P.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
+    #          model_P.trainable_variables[1].numpy(),       # u (H,) row vector
+    #          model_P.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
+    #     )
+    # )
 
     # Count the last epoch.
     n_epochs = epoch + 1
@@ -995,44 +1057,32 @@ def main():
     np.savetxt(os.path.join(output_dir, 'losses_vx.dat'),  np.array(losses_vx))
     np.savetxt(os.path.join(output_dir, 'losses_vy.dat'),  np.array(losses_vy))
     np.savetxt(os.path.join(output_dir, 'losses_vz.dat'),  np.array(losses_vz))
-    np.savetxt(os.path.join(output_dir, 'losses_Bx.dat'),  np.array(losses_Bx))
     np.savetxt(os.path.join(output_dir, 'losses_By.dat'),  np.array(losses_By))
     np.savetxt(os.path.join(output_dir, 'losses_Bz.dat'),  np.array(losses_Bz))
     np.savetxt(os.path.join(output_dir, 'losses_P.dat'),   np.array(losses_P))
     np.savetxt(os.path.join(output_dir, 'losses.dat'),     np.array(losses))
 
-    # Save the parameter histories.
-    np.savetxt(os.path.join(output_dir, 'phist_rho.dat'), np.array(phist_rho))
-    np.savetxt(os.path.join(output_dir, 'phist_vx.dat'),  np.array(phist_vx))
-    np.savetxt(os.path.join(output_dir, 'phist_vy.dat'),  np.array(phist_vy))
-    np.savetxt(os.path.join(output_dir, 'phist_vz.dat'),  np.array(phist_vz))
-    np.savetxt(os.path.join(output_dir, 'phist_Bx.dat'),  np.array(phist_Bx))
-    np.savetxt(os.path.join(output_dir, 'phist_By.dat'),  np.array(phist_By))
-    np.savetxt(os.path.join(output_dir, 'phist_Bz.dat'),  np.array(phist_Bz))
-    np.savetxt(os.path.join(output_dir, 'phist_P.dat'),   np.array(phist_P))
+    # # Save the parameter histories.
+    # np.savetxt(os.path.join(output_dir, 'phist_rho.dat'), np.array(phist_rho))
+    # np.savetxt(os.path.join(output_dir, 'phist_vx.dat'),  np.array(phist_vx))
+    # np.savetxt(os.path.join(output_dir, 'phist_vy.dat'),  np.array(phist_vy))
+    # np.savetxt(os.path.join(output_dir, 'phist_vz.dat'),  np.array(phist_vz))
+    # np.savetxt(os.path.join(output_dir, 'phist_Bx.dat'),  np.array(phist_Bx))
+    # np.savetxt(os.path.join(output_dir, 'phist_By.dat'),  np.array(phist_By))
+    # np.savetxt(os.path.join(output_dir, 'phist_Bz.dat'),  np.array(phist_Bz))
+    # np.savetxt(os.path.join(output_dir, 'phist_P.dat'),   np.array(phist_P))
 
     # Compute and save the trained results at training points.
     with tf.GradientTape(persistent=True) as tape:
 
         # Compute the network outputs at the training points.
-        N_rho = model_rho(xt)
-        N_vx  = model_vx( xt)
-        N_vy  = model_vy( xt)
-        N_vz  = model_vz( xt)
-        N_Bx  = model_Bx( xt)
-        N_By  = model_By( xt)
-        N_Bz  = model_Bz( xt)
-        N_P   = model_P(  xt)
-
-        # Compute the trial solutions.
-        rho_train = Ytrial_rho(xt, N_rho)
-        vx_train  = Ytrial_vx( xt, N_vx)
-        vy_train  = Ytrial_vy( xt, N_vy)
-        vz_train  = Ytrial_vz( xt, N_vz)
-        Bx_train  = Ytrial_Bx( xt, N_Bx)
-        By_train  = Ytrial_By( xt, N_By)
-        Bz_train  = Ytrial_Bz( xt, N_Bz)
-        P_train   = Ytrial_P(  xt, N_P)
+        rho_train = model_rho(xt)
+        vx_train  = model_vx( xt)
+        vy_train  = model_vy( xt)
+        vz_train  = model_vz( xt)
+        By_train  = model_By( xt)
+        Bz_train  = model_Bz( xt)
+        P_train   = model_P(  xt)
 
     # Compute gradients here if needed.
     # drho_dx_train = tape.gradient(rho_train, x)
@@ -1040,7 +1090,6 @@ def main():
     np.savetxt(os.path.join(output_dir, "vx_train.dat"),   vx_train.numpy().reshape((n_train,)))
     np.savetxt(os.path.join(output_dir, "vy_train.dat"),   vy_train.numpy().reshape((n_train,)))
     np.savetxt(os.path.join(output_dir, "vz_train.dat"),   vz_train.numpy().reshape((n_train,)))
-    np.savetxt(os.path.join(output_dir, "Bx_train.dat"),   Bx_train.numpy().reshape((n_train,)))
     np.savetxt(os.path.join(output_dir, "By_train.dat"),   By_train.numpy().reshape((n_train,)))
     np.savetxt(os.path.join(output_dir, "Bz_train.dat"),   Bz_train.numpy().reshape((n_train,)))
     np.savetxt(os.path.join(output_dir, "P_train.dat"),     P_train.numpy().reshape((n_train,)))

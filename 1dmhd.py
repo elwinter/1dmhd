@@ -61,6 +61,9 @@ m = 2
 # Default random number generator seed.
 default_random_seed = 0
 
+# Default number of layers.
+default_n_layers = 1
+
 # Default number of hidden nosdes per layer.
 default_H = 10
 
@@ -110,6 +113,10 @@ def create_command_line_parser():
     parser.add_argument(
         "--n_hid", type=int, default=default_H,
         help="Number of hidden nodes per layer (default: %(default)s)"
+    )
+    parser.add_argument(
+        "--n_layers", type=int, default=default_n_layers,
+        help="Number of hidden layers (default: %(default)s)"
     )
     parser.add_argument(
         "--nt_train", type=int, default=default_nt_train,
@@ -212,6 +219,7 @@ def save_hyperparameters(output_dir, args):
     with open(path, "w") as f:
         f.write("learning_rate = %s\n" % repr(args.learning_rate))
         f.write("max_epochs = %s\n" % repr(args.max_epochs))
+        f.write("n_layers = %s\n" % repr(args.n_layers))
         f.write("H = %s\n" % repr(args.n_hid))
         f.write("w0_range = %s\n" % repr(w0_range))
         f.write("u0_range = %s\n" % repr(u0_range))
@@ -318,34 +326,40 @@ def create_training_data(nx_train, nt_train):
     return xt_train
 
 
-def build_model(H):
-    """Build a single-layer neural network model.
+def build_model(n_layers, H):
+    """Build a multi-layer neural network model.
     
-    Build a fully-connected, single-layer neural network with single output.
+    Build a fully-connected, multi-layer neural network with single output.
 
     Parameters
     ----------
+    n_layers : int
+        Number of hidden layers to create.
     H : int
-        Number of nodes to use in the hidden layer.
+        Number of nodes to use in each hidden layer.
     
     Returns
     -------
     net : tf.keras.Sequential
         The neural network.s
     """
-    hidden_layer = tf.keras.layers.Dense(
-        units=H, use_bias=True,
-        activation=tf.keras.activations.sigmoid,
-        kernel_initializer=tf.keras.initializers.RandomUniform(*w0_range),
-        bias_initializer=tf.keras.initializers.RandomUniform(*u0_range)
-    )
+    layers = []
+    for i in range(n_layers):
+        hidden_layer = tf.keras.layers.Dense(
+            units=H, use_bias=True,
+            activation=tf.keras.activations.sigmoid,
+            kernel_initializer=tf.keras.initializers.RandomUniform(*w0_range),
+            bias_initializer=tf.keras.initializers.RandomUniform(*u0_range)
+        )
+        layers.append(hidden_layer)
     output_layer = tf.keras.layers.Dense(
         units=1,
         activation=tf.keras.activations.linear,
         kernel_initializer=tf.keras.initializers.RandomUniform(*v0_range),
         use_bias=False,
     )
-    model = tf.keras.Sequential([hidden_layer, output_layer])
+    layers.append(output_layer)
+    model = tf.keras.Sequential(layers)
     return model
 
 
@@ -647,6 +661,7 @@ def main():
     learning_rate = args.learning_rate
     max_epochs = args.max_epochs
     H = args.n_hid
+    n_layers = args.n_layers
     nt_train = args.nt_train
     nx_train = args.nx_train
     n_train = nx_train*nt_train
@@ -682,13 +697,13 @@ def main():
     np.savetxt(os.path.join(output_dir, "x1t_train.dat"), x1t_train)
 
     # Build the models.
-    model_rho = build_model(H)
-    model_vx  = build_model(H)
-    model_vy  = build_model(H)
-    model_vz  = build_model(H)
-    model_By  = build_model(H)
-    model_Bz  = build_model(H)
-    model_P   = build_model(H)
+    model_rho = build_model(n_layers, H)
+    model_vx  = build_model(n_layers, H)
+    model_vy  = build_model(n_layers, H)
+    model_vz  = build_model(n_layers, H)
+    model_By  = build_model(n_layers, H)
+    model_Bz  = build_model(n_layers, H)
+    model_P   = build_model(n_layers, H)
 
     # Create the optimizers.
     optimizer_rho = tf.keras.optimizers.Adam(learning_rate=learning_rate)
@@ -802,11 +817,11 @@ def main():
         losses.append(    L.numpy())
 
         # Check for convergence.
-        if epoch > 1:
-            loss_delta = losses[-1] - losses[-2]
-            if abs(loss_delta) <= tol:
-                converged = True
-                break
+        # if epoch > 1:
+        #     loss_delta = losses[-1] - losses[-2]
+        #     if abs(loss_delta) <= tol:
+        #         converged = True
+        #         break
 
         # Compute the gradient of the loss function wrt the network parameters.
         pgrad_rho = tape1.gradient(L, model_rho.trainable_variables)
