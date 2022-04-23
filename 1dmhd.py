@@ -29,58 +29,61 @@ import numpy as np
 import tensorflow as tf
 
 
-# Global object to hold the problem definition.
-p = None
-
-
 # Program constants
 
 # Program description.
 description = "Solve the 1-D MHD equations with a set of neural networks."
 
-# Default identifier string for a run: "1dmhd" + time in seconds.
+# Default learning rate.
+default_learning_rate = 0.01
+
+# Default maximum number of training epochs.
+default_max_epochs = 1000
+
+# Default number of hidden nodes per layer.
+default_H = 10
+
+# Default number of layers in the fully-connected network, each with H nodes.
+default_n_layers = 1
+
+# Default number of training points in the t-dimension.
+default_nt_train = 11
+
+# Default number of training points in the x-dimension.
+default_nx_train = 11
+
+# Default problem name.
 default_problem = "static"
+
+# Default random number generator seed.
+default_seed = 0
+
+# Absolute tolerance for consecutive loss function values to indicate
+# convergence.
+default_tolerance = 1e-6
 
 # Name of system information file.
 system_information_file = "system_information.txt"
 
-# Name of hyperparameter record file.
+# Name of hyperparameter record file, as an importable Python module.
 hyperparameter_file = "hyperparameters.py"
-
-# Name of optimizer used for training.
-optimizer_name = "Adam"
 
 # Initial parameter ranges
 w0_range = [-0.1, 0.1]
 u0_range = [-0.1, 0.1]
 v0_range = [-0.1, 0.1]
 
-# Number of dimensions
-m = 2
+# Placeholder for training points with all x set to 0.
+x0t = None
 
-# Default random number generator seed.
-default_random_seed = 0
-
-# Default number of layers.
-default_n_layers = 1
-
-# Default number of hidden nosdes per layer.
-default_H = 10
-
-# Default maximum number of training epochs.
-default_max_epochs = 1000
-
-# Default learning rate.
-default_learning_rate = 0.01
+# Placeholder for training points with all x set to 1.
+x1t = None
 
 
-# Absolute tolerance for consecutive loss function values to indicate
-# convergence.
-default_tolerance = 1e-6
+# Program global variables.
 
-# Default number of training points in each dimension.
-default_nx_train = 11
-default_nt_train = 11
+# Global object to hold the problem definition.
+p = None
 
 
 def create_command_line_parser():
@@ -131,7 +134,7 @@ def create_command_line_parser():
         help="Name of problem to solve (default: %(default)s)"
     )
     parser.add_argument(
-        "--seed", type=int, default=default_random_seed,
+        "--seed", type=int, default=default_seed,
         help="Seed for random number generator (default: %(default)s)"
     )
     parser.add_argument(
@@ -145,7 +148,7 @@ def create_command_line_parser():
     return parser
 
 
-def create_output_directory(path=None):
+def create_output_directory(path="."):
     """Create an output directory for the results.
     
     Create the specified directory. Abort if it already exists.
@@ -170,7 +173,7 @@ def create_output_directory(path=None):
         pass
 
 
-def save_system_information(output_dir):
+def save_system_information(output_dir="."):
     """Save a summary of system characteristics.
     
     Save a summary of the host system in the specified directory.
@@ -198,7 +201,7 @@ def save_system_information(output_dir):
         f.write("Python file: %s\n" % __file__)
 
 
-def save_hyperparameters(output_dir, args):
+def save_hyperparameters(args, output_dir="."):
     """Save the neural network hyperparameters.
     
     Print a record of the hyperparameters of the neural networks in the
@@ -206,10 +209,10 @@ def save_hyperparameters(output_dir, args):
 
     Parameters
     ----------
-    output_dir : str
-        Path to directory to contain the report.
     args : dict
         Dictionary of command-line arguments.
+    output_dir : str
+        Path to directory to contain the report.
 
     Returns
     -------
@@ -328,8 +331,9 @@ def create_training_data(nx_train, nt_train):
 
 def build_model(n_layers, H):
     """Build a multi-layer neural network model.
-    
+
     Build a fully-connected, multi-layer neural network with single output.
+    Each layer will have H hidden nodes.
 
     Parameters
     ----------
@@ -337,11 +341,11 @@ def build_model(n_layers, H):
         Number of hidden layers to create.
     H : int
         Number of nodes to use in each hidden layer.
-    
+
     Returns
     -------
-    net : tf.keras.Sequential
-        The neural network.s
+    model : tf.keras.Sequential
+        The neural network.
     """
     layers = []
     for i in range(n_layers):
@@ -363,198 +367,7 @@ def build_model(n_layers, H):
     return model
 
 
-# Define the differential equations using TensorFlow operations.
-
-# These equations are taken from:
-
-# https://www.csun.edu/~jb715473/examples/mhd1d.htm
-
-# The original equations are:
-
-# For 1-D flow, div(B) = 0, so Bx is constant.
-
-# The general form of the each differential equation is (d are
-# partial derivatives)
-
-#     dU/dt + dF/dx = 0
-
-#     U = (rho, rho*vx, rho*vy, rho*vz, By, Bz, E)
-
-#           / rho*vx                       \
-#          |  rho*vx**2 + Ptot - Bx**2      |
-#      F = |  rho*vx*vy - Bx*By             |
-#          |  rho*vx*vz - Bx*Bz             |
-#          |  By*vx - Bx*vy                 |
-#          |  Bz*vx - Bx*vz                 |
-#           \ (E + Ptot)*vx - Bx*(B dot v) /
-
-#     Ptot = P + B**2/2
-
-#     P = (gamma - 1)*(E - rho*v**2/2 - B**2/2)
-
-# xt is the list of tf.Variable [x, t].
-# Y is the list of tf.Variable [rho, vx, vy, vz, By, Bz, E]
-# del_Y is the list of gradients [del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_p]
-
-# @tf.function
-def pde_rho(xt, Y, del_Y):
-    """Differential equation for rho."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    drho_dx = del_rho[:, 0]
-    drho_dt = del_rho[:, 1]
-    dvx_dx  =  del_vx[:, 0]
-    G = drho_dt + rho*dvx_dx + drho_dx*vx
-    return G
-
-# @tf.function
-def pde_vx(xt, Y, del_Y):
-    """Differential equation for vx."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    drho_dx = del_rho[:, 0]
-    drho_dt = del_rho[:, 1]
-    dvx_dx  =  del_vx[:, 0]
-    dvx_dt  =  del_vx[:, 1]
-    dBy_dx  =  del_By[:, 0]
-    dBz_dx  =  del_Bz[:, 0]
-    dP_dx   =   del_P[:, 0]
-    dPtot_dx = dP_dx + By*dBy_dx + Bz*dBz_dx
-    G = (
-        rho*dvx_dt + drho_dt*vx
-        + rho*2*vx*dvx_dx + drho_dx*vx**2 + dPtot_dx
-    )
-    return G
-
-# @tf.function
-def pde_vy(xt, Y, del_Y):
-    """Differential equation for vy."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    Bx = p.Bx_0
-    drho_dx = del_rho[:, 0]
-    drho_dt = del_rho[:, 1]
-    dvx_dx  =  del_vx[:, 0]
-    dvy_dx  =  del_vy[:, 0]
-    dvy_dt  =  del_vy[:, 1]
-    dBy_dx  =  del_By[:, 0]
-    G = (
-        rho*dvy_dt + drho_dt*vy
-        + rho*vx*dvy_dx + rho*dvx_dx*vy + drho_dx*vx*vy
-        - Bx*dBy_dx
-    )
-    return G
-
-# @tf.function
-def pde_vz(xt, Y, del_Y):
-    """Differential equation for vz."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    Bx = p.Bx_0
-    drho_dx = del_rho[:, 0]
-    drho_dt = del_rho[:, 1]
-    dvx_dx  =  del_vx[:, 0]
-    dvz_dx  =  del_vz[:, 0]
-    dvz_dt  =  del_vz[:, 1]
-    dBz_dx  =  del_Bz[:, 0]
-    G = (
-        rho*dvz_dt + drho_dt*vz
-        + rho*vx*dvz_dx + rho*dvx_dx*vz + drho_dx*vx*vz
-        - Bx*dBz_dx
-    )
-    return G
-
-# @tf.function
-def pde_By(xt, Y, del_Y):
-    """Differential equation for By."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    Bx = p.Bx_0
-    dvx_dx = del_vx[:, 0]
-    dvy_dx = del_vy[:, 0]
-    dBy_dx = del_By[:, 0]
-    dBy_dt = del_By[:, 1]
-    G = dBy_dt + By*dvx_dx + dBy_dx*vx - Bx*dvy_dx
-    return G
-
-# @tf.function
-def pde_Bz(xt, Y, del_Y):
-    """Differential equation for Bz."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    Bx = p.Bx_0
-    dvx_dx  = del_vx[:, 0]
-    dvz_dx  = del_vz[:, 0]
-    dBz_dx  = del_Bz[:, 0]
-    dBz_dt  = del_Bz[:, 1]
-    G = dBz_dt + Bz*dvx_dx + dBz_dx*vx - Bx*dvz_dx
-    return G
-
-# @tf.function
-def pde_P(xt, Y, del_Y):
-    """Differential equation for P (actually E)."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    Bx = p.Bx_0
-    drho_dx  = del_rho[:, 0]
-    drho_dt  = del_rho[:, 1]
-    dvx_dx   =  del_vx[:, 0]
-    dvx_dt   =  del_vx[:, 1]
-    dvy_dx   =  del_vy[:, 0]
-    dvy_dt   =  del_vy[:, 1]
-    dvz_dx   =  del_vz[:, 0]
-    dvz_dt   =  del_vz[:, 1]
-    dBy_dx   =  del_By[:, 0]
-    dBy_dt   =  del_By[:, 1]
-    dBz_dx   =  del_Bz[:, 0]
-    dBz_dt   =  del_Bz[:, 1]
-    dP_dx    =   del_P[:, 0]
-    dP_dt    =   del_P[:, 1]
-    Ptot = P + 0.5*(Bx**2 + By**2 + Bz**2)
-    dPtot_dx = dP_dx + By*dBy_dx + Bz*dBz_dx
-    E = (
-        P/(p.gamma - 1)
-        + 0.5*rho*(vx**2 + vy**2 + vz**2)
-        + 0.5*(Bx**2 + By**2 + Bz**2)
-    )
-    dE_dx = (
-        dP_dx/(p.gamma - 1)
-        + rho*(vx*dvx_dx + vy*dvy_dx + vz*dvz_dx)
-        + drho_dx*0.5*(vx**2 + vy**2  + vz**2)
-        + By*dBy_dx + Bz*dBz_dx
-    )
-    dE_dt = (
-        dP_dt/(p.gamma - 1)
-        + rho*(vx*dvx_dt + vy*dvy_dt + vz*dvz_dt)
-        + drho_dt*0.5*(vx**2 + vy**2  + vz**2)
-        + By*dBy_dt + Bz*dBz_dt
-    )
-    G = (
-        dE_dt + (E + Ptot)*dvx_dx + (dE_dx + dPtot_dx)*vx
-        - Bx*(Bx*dvx_dx + By*dvy_dx + dBy_dx*vy + Bz*dvz_dx + dBz_dx*vz)
-    )
-    return G
-
-
 # Define the trial functions.
-
-# Placeholders for boundary coordinate pairs.
-x0t = None
-x1t = None
 
 # @tf.function
 def Ytrial_rho(xt, N):
@@ -649,6 +462,199 @@ def Ytrial_P(xt, N):
     return Y
 
 
+# Define the differential equations using TensorFlow operations.
+
+# These equations are taken from:
+
+# https://www.csun.edu/~jb715473/examples/mhd1d.htm
+
+# The original equations are:
+
+# For 1-D flow, div(B) = 0, so Bx is constant.
+
+# The general form of each differential equation is (d are
+# partial derivatives)
+
+#     dU/dt + dF/dx = 0
+
+#     U = (rho, rho*vx, rho*vy, rho*vz, By, Bz, E)
+
+#           / rho*vx                       \
+#          |  rho*vx**2 + Ptot - Bx**2      |
+#      F = |  rho*vx*vy - Bx*By             |
+#          |  rho*vx*vz - Bx*Bz             |
+#          |  By*vx - Bx*vy                 |
+#          |  Bz*vx - Bx*vz                 |
+#           \ (E + Ptot)*vx - Bx*(B dot v) /
+
+#     Ptot = P + B**2/2
+
+#     P = (gamma - 1)*(E - rho*v**2/2 - B**2/2)
+
+# xt is the tf.Variable [x, t] of all of the training points.
+# Y is the list of tf.Variable [rho, vx, vy, vz, By, Bz, P]
+# del_Y is the list of gradients [del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P]
+
+# @tf.function
+def pde_rho(xt, Y, del_Y):
+    """Differential equation for rho."""
+    x = xt[:, 0]
+    t = xt[:, 1]
+    (rho, vx, vy, vz, By, Bz, P) = Y
+    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
+    drho_dx = del_rho[:, 0]
+    drho_dt = del_rho[:, 1]
+    dvx_dx  =  del_vx[:, 0]
+    G = drho_dt + rho*dvx_dx + drho_dx*vx
+    return G
+
+# @tf.function
+def pde_vx(xt, Y, del_Y):
+    """Differential equation for vx."""
+    x = xt[:, 0]
+    t = xt[:, 1]
+    (rho, vx, vy, vz, By, Bz, P) = Y
+    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
+    drho_dx = del_rho[:, 0]
+    drho_dt = del_rho[:, 1]
+    dvx_dx  =  del_vx[:, 0]
+    dvx_dt  =  del_vx[:, 1]
+    dBy_dx  =  del_By[:, 0]
+    dBz_dx  =  del_Bz[:, 0]
+    dP_dx   =   del_P[:, 0]
+    # dBx_dx is 0.
+    dPtot_dx = dP_dx + By*dBy_dx + Bz*dBz_dx
+    G = (
+        rho*dvx_dt + drho_dt*vx
+        + rho*2*vx*dvx_dx + drho_dx*vx**2 + dPtot_dx
+    )
+    return G
+
+# @tf.function
+def pde_vy(xt, Y, del_Y):
+    """Differential equation for vy."""
+    x = xt[:, 0]
+    t = xt[:, 1]
+    (rho, vx, vy, vz, By, Bz, P) = Y
+    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
+    Bx = p.Bx_0
+    drho_dx = del_rho[:, 0]
+    drho_dt = del_rho[:, 1]
+    dvx_dx  =  del_vx[:, 0]
+    dvy_dx  =  del_vy[:, 0]
+    dvy_dt  =  del_vy[:, 1]
+    dBy_dx  =  del_By[:, 0]
+    # dBx_dx is 0.
+    G = (
+        rho*dvy_dt + drho_dt*vy
+        + rho*vx*dvy_dx + rho*dvx_dx*vy + drho_dx*vx*vy
+        - Bx*dBy_dx
+    )
+    return G
+
+# @tf.function
+def pde_vz(xt, Y, del_Y):
+    """Differential equation for vz."""
+    x = xt[:, 0]
+    t = xt[:, 1]
+    (rho, vx, vy, vz, By, Bz, P) = Y
+    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
+    Bx = p.Bx_0
+    drho_dx = del_rho[:, 0]
+    drho_dt = del_rho[:, 1]
+    dvx_dx  =  del_vx[:, 0]
+    dvz_dx  =  del_vz[:, 0]
+    dvz_dt  =  del_vz[:, 1]
+    dBz_dx  =  del_Bz[:, 0]
+    # dBx_dx is 0.
+    G = (
+        rho*dvz_dt + drho_dt*vz
+        + rho*vx*dvz_dx + rho*dvx_dx*vz + drho_dx*vx*vz
+        - Bx*dBz_dx
+    )
+    return G
+
+# @tf.function
+def pde_By(xt, Y, del_Y):
+    """Differential equation for By."""
+    x = xt[:, 0]
+    t = xt[:, 1]
+    (rho, vx, vy, vz, By, Bz, P) = Y
+    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
+    Bx = p.Bx_0
+    dvx_dx = del_vx[:, 0]
+    dvy_dx = del_vy[:, 0]
+    dBy_dx = del_By[:, 0]
+    dBy_dt = del_By[:, 1]
+    # dBx_dx is 0.
+    G = dBy_dt + By*dvx_dx + dBy_dx*vx - Bx*dvy_dx
+    return G
+
+# @tf.function
+def pde_Bz(xt, Y, del_Y):
+    """Differential equation for Bz."""
+    x = xt[:, 0]
+    t = xt[:, 1]
+    (rho, vx, vy, vz, By, Bz, P) = Y
+    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
+    Bx = p.Bx_0
+    dvx_dx  = del_vx[:, 0]
+    dvz_dx  = del_vz[:, 0]
+    dBz_dx  = del_Bz[:, 0]
+    dBz_dt  = del_Bz[:, 1]
+    # dBx_dx is 0.
+    G = dBz_dt + Bz*dvx_dx + dBz_dx*vx - Bx*dvz_dx
+    return G
+
+# @tf.function
+def pde_P(xt, Y, del_Y):
+    """Differential equation for P (actually E)."""
+    x = xt[:, 0]
+    t = xt[:, 1]
+    (rho, vx, vy, vz, By, Bz, P) = Y
+    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
+    Bx = p.Bx_0
+    drho_dx  = del_rho[:, 0]
+    drho_dt  = del_rho[:, 1]
+    dvx_dx   =  del_vx[:, 0]
+    dvx_dt   =  del_vx[:, 1]
+    dvy_dx   =  del_vy[:, 0]
+    dvy_dt   =  del_vy[:, 1]
+    dvz_dx   =  del_vz[:, 0]
+    dvz_dt   =  del_vz[:, 1]
+    dBy_dx   =  del_By[:, 0]
+    dBy_dt   =  del_By[:, 1]
+    dBz_dx   =  del_Bz[:, 0]
+    dBz_dt   =  del_Bz[:, 1]
+    dP_dx    =   del_P[:, 0]
+    dP_dt    =   del_P[:, 1]
+    Ptot = P + 0.5*(Bx**2 + By**2 + Bz**2)
+    # dBx_dx and dBx_dt are 0.
+    dPtot_dx = dP_dx + By*dBy_dx + Bz*dBz_dx
+    E = (
+        P/(p.gamma - 1)
+        + 0.5*rho*(vx**2 + vy**2 + vz**2)
+        + 0.5*(Bx**2 + By**2 + Bz**2)
+    )
+    dE_dx = (
+        dP_dx/(p.gamma - 1)
+        + rho*(vx*dvx_dx + vy*dvy_dx + vz*dvz_dx)
+        + drho_dx*0.5*(vx**2 + vy**2  + vz**2)
+        + By*dBy_dx + Bz*dBz_dx
+    )
+    dE_dt = (
+        dP_dt/(p.gamma - 1)
+        + rho*(vx*dvx_dt + vy*dvy_dt + vz*dvz_dt)
+        + drho_dt*0.5*(vx**2 + vy**2  + vz**2)
+        + By*dBy_dt + Bz*dBz_dt
+    )
+    G = (
+        dE_dt + (E + Ptot)*dvx_dx + (dE_dx + dPtot_dx)*vx
+        - Bx*(Bx*dvx_dx + By*dvy_dx + dBy_dx*vy + Bz*dvz_dx + dBz_dx*vz)
+    )
+    return G
+
+
 def main():
     """Begin main program."""
 
@@ -664,39 +670,49 @@ def main():
     n_layers = args.n_layers
     nt_train = args.nt_train
     nx_train = args.nx_train
-    n_train = nx_train*nt_train
-    random_seed = args.seed
     problem = args.problem
+    seed = args.seed
     tol = args.tolerance
     verbose = args.verbose
+    if debug:
+        print("args = %s" % args)
 
     # Import the problem to solve.
     global p
+    if verbose:
+        print("Importing definition for problem '%s'." % problem)
     p = import_module(problem)
 
     # Set up the output directory under the current directory.
     output_dir = os.path.join(".", problem)
     create_output_directory(output_dir)
 
-    # Record system information and run parameters.
+    # Record system information and network parameters.
+    if verbose:
+        print("Recording system information and model hyperparameters.")
     save_system_information(output_dir)
-    save_hyperparameters(output_dir, args)
+    save_hyperparameters(args, output_dir)
 
     # Create and save the training data.
+    if verbose:
+        print("Creating and saving training data.")
     xt_train = create_training_data(nx_train, nt_train)
     np.savetxt(os.path.join(output_dir, "xt_train.dat"), xt_train)
+    n_train = len(xt_train)
 
-    # Create copies of the training data with all x = 0.
+    # Create a copy of the training data with all x = 0.
     x0t_train = xt_train.copy()
     x0t_train[:, 0] = 0
     np.savetxt(os.path.join(output_dir, "x0t_train.dat"), x0t_train)
 
-    # Create copies of the training data with all x = 1.
+    # Create a copy of the training data with all x = 1.
     x1t_train = xt_train.copy()
     x1t_train[:, 0] = 1
     np.savetxt(os.path.join(output_dir, "x1t_train.dat"), x1t_train)
 
     # Build the models.
+    if verbose:
+        print("Creating neural networks.")
     model_rho = build_model(n_layers, H)
     model_vx  = build_model(n_layers, H)
     model_vy  = build_model(n_layers, H)
@@ -706,6 +722,8 @@ def main():
     model_P   = build_model(n_layers, H)
 
     # Create the optimizers.
+    if verbose:
+        print("Creating optimizers.")
     optimizer_rho = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     optimizer_vx  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     optimizer_vy  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
@@ -726,22 +744,14 @@ def main():
     losses_P   = []
     losses     = []
 
-    phist_rho = []
-    phist_vx  = []
-    phist_vy  = []
-    phist_vz  = []
-    phist_By  = []
-    phist_Bz  = []
-    phist_P   = []
-
     # Set the random number seed for reproducibility.
-    tf.random.set_seed(random_seed)
+    tf.random.set_seed(seed)
 
     # Rename the training data Variables for convenience.
     xt_train_var = tf.Variable(xt_train)
     xt = xt_train_var
-    x0t_train_var = tf.Variable(x0t_train)
     global x0t, x1t
+    x0t_train_var = tf.Variable(x0t_train)
     x0t = x0t_train_var
     x1t_train_var = tf.Variable(x1t_train)
     x1t = x1t_train_var
@@ -750,7 +760,8 @@ def main():
     converged = False
 
     t_start = datetime.datetime.now()
-    print("Training started at", t_start, max_epochs)
+    if verbose:
+        print("Training started at", t_start, max_epochs)
 
     for epoch in range(max_epochs):
 
@@ -816,12 +827,12 @@ def main():
         losses_P.append(  L_P.numpy())
         losses.append(    L.numpy())
 
-        # Check for convergence.
-        # if epoch > 1:
-        #     loss_delta = losses[-1] - losses[-2]
-        #     if abs(loss_delta) <= tol:
-        #         converged = True
-        #         break
+#         # Check for convergence.
+#         # if epoch > 1:
+#         #     loss_delta = losses[-1] - losses[-2]
+#         #     if abs(loss_delta) <= tol:
+#         #         converged = True
+#         #         break
 
         # Compute the gradient of the loss function wrt the network parameters.
         pgrad_rho = tape1.gradient(L, model_rho.trainable_variables)
@@ -832,57 +843,6 @@ def main():
         pgrad_Bz  = tape1.gradient(L,  model_Bz.trainable_variables)
         pgrad_P   = tape1.gradient(L,   model_P.trainable_variables)
 
-        # Save the parameters used in this epoch.
-        phist_rho.append(
-            np.hstack(
-                (model_rho.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_rho.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_rho.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
-        phist_vx.append(
-            np.hstack(
-                (model_vx.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_vx.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_vx.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
-        phist_vy.append(
-            np.hstack(
-                (model_vy.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_vy.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_vy.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
-        phist_vz.append(
-            np.hstack(
-                (model_vz.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_vz.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_vz.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
-        phist_By.append(
-            np.hstack(
-                (model_By.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_By.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_By.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
-        phist_Bz.append(
-            np.hstack(
-                (model_Bz.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_Bz.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_Bz.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
-        phist_P.append(
-            np.hstack(
-                (model_P.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-                 model_P.trainable_variables[1].numpy(),       # u (H,) row vector
-                 model_P.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-            )
-        )
-
         # Update the parameters for this epoch.
         optimizer_rho.apply_gradients(zip(pgrad_rho, model_rho.trainable_variables))
         optimizer_vx.apply_gradients(zip( pgrad_vx,   model_vx.trainable_variables))
@@ -892,72 +852,24 @@ def main():
         optimizer_Bz.apply_gradients(zip( pgrad_Bz,   model_Bz.trainable_variables))
         optimizer_P.apply_gradients( zip( pgrad_P,     model_P.trainable_variables))
 
-        if epoch % 1 == 0:
+        if verbose and epoch % 1 == 0:
             print("Ending epoch %s, loss function = %f" % (epoch, L.numpy()))
-
-    # Save the parameters used in the last epoch.
-    phist_rho.append(
-        np.hstack(
-            (model_rho.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_rho.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_rho.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
-    phist_vx.append(
-        np.hstack(
-            (model_vx.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_vx.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_vx.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
-    phist_vy.append(
-        np.hstack(
-            (model_vy.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_vy.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_vy.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
-    phist_vz.append(
-        np.hstack(
-            (model_vz.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_vz.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_vz.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
-    phist_By.append(
-        np.hstack(
-            (model_By.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_By.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_By.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
-    phist_Bz.append(
-        np.hstack(
-            (model_Bz.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_Bz.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_Bz.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
-    phist_P.append(
-        np.hstack(
-            (model_P.trainable_variables[0].numpy().reshape((m*H,)),    # w (m, H) matrix -> (m*H,) row vector
-             model_P.trainable_variables[1].numpy(),       # u (H,) row vector
-             model_P.trainable_variables[2][:, 0].numpy()) # v (H, 1) column vector
-        )
-    )
 
     # Count the last epoch.
     n_epochs = epoch + 1
 
     t_stop = datetime.datetime.now()
-    print("Training stopped at", t_stop)
     t_elapsed = t_stop - t_start
-    print("Total training time was %s seconds." % t_elapsed.total_seconds())
-    print("Epochs: %d" % n_epochs)
-    print("Final value of loss function: %f" % losses[-1])
-    print("converged = %s" % converged)
+    if verbose:
+        print("Training stopped at", t_stop)
+        print("Total training time was %s seconds." % t_elapsed.total_seconds())
+        print("Epochs: %d" % n_epochs)
+        # print("Final value of loss function: %f" % losses[-1])
+        print("converged = %s" % converged)
 
     # Save the loss function histories.
+    if verbose:
+        print("Saving loss function histories.")
     np.savetxt(os.path.join(output_dir, 'losses_rho.dat'), np.array(losses_rho))
     np.savetxt(os.path.join(output_dir, 'losses_vx.dat'),  np.array(losses_vx))
     np.savetxt(os.path.join(output_dir, 'losses_vy.dat'),  np.array(losses_vy))
@@ -967,16 +879,9 @@ def main():
     np.savetxt(os.path.join(output_dir, 'losses_P.dat'),   np.array(losses_P))
     np.savetxt(os.path.join(output_dir, 'losses.dat'),     np.array(losses))
 
-    # Save the parameter histories.
-    np.savetxt(os.path.join(output_dir, 'phist_rho.dat'), np.array(phist_rho))
-    np.savetxt(os.path.join(output_dir, 'phist_vx.dat'),  np.array(phist_vx))
-    np.savetxt(os.path.join(output_dir, 'phist_vy.dat'),  np.array(phist_vy))
-    np.savetxt(os.path.join(output_dir, 'phist_vz.dat'),  np.array(phist_vz))
-    np.savetxt(os.path.join(output_dir, 'phist_By.dat'),  np.array(phist_By))
-    np.savetxt(os.path.join(output_dir, 'phist_Bz.dat'),  np.array(phist_Bz))
-    np.savetxt(os.path.join(output_dir, 'phist_P.dat'),   np.array(phist_P))
-
     # Compute and save the trained results at training points.
+    if verbose:
+        print("Computing and saving trained results.")
     with tf.GradientTape(persistent=True) as tape:
 
         # Compute the network outputs at the training points.
@@ -997,8 +902,6 @@ def main():
         Bz_train  = Ytrial_Bz( xt, N_Bz)
         P_train   = Ytrial_P(  xt, N_P)
 
-    # Compute gradients here if needed.
-    # drho_dx_train = tape.gradient(rho_train, x)
     np.savetxt(os.path.join(output_dir, "rho_train.dat"), rho_train.numpy().reshape((n_train,)))
     np.savetxt(os.path.join(output_dir, "vx_train.dat"),   vx_train.numpy().reshape((n_train,)))
     np.savetxt(os.path.join(output_dir, "vy_train.dat"),   vy_train.numpy().reshape((n_train,)))
