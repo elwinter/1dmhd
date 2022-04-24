@@ -9,6 +9,9 @@ This code uses the trial function method.
 
 This code assumes Bx is constant, and so the gradient of Bx is 0.
 
+The problem is set up as a 2-point boundary value problem in x, and
+an initial value problem in t.
+
 Author
 ------
 Eric Winter (eric.winter62@gmail.com)
