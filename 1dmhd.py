@@ -34,13 +34,13 @@ import tensorflow as tf
 # Program constants
 
 # Program description.
-description = "Solve the 1-D MHD equations with a set of neural networks."
+description = "Solve the 1-D MHD equations with a set of neural networks, using the trial function method."
 
 # Default learning rate.
 default_learning_rate = 0.01
 
 # Default maximum number of training epochs.
-default_max_epochs = 1000
+default_max_epochs = 10
 
 # Default number of hidden nodes per layer.
 default_H = 10
@@ -235,100 +235,51 @@ def save_hyperparameters(args, output_dir="."):
         f.write("tol = %s\n" % repr(args.tolerance))
 
 
-def prod(n):
-    """Compute the product of the elements of a list of numbers.
-    
-    Compute the product of the elements of a list of numbers.
-
-    Parameters
-    ----------
-    n : list of int
-        List of integers
-    
-    Returns
-    -------
-    p : int
-        Product of numbers in list.
-    """
-    p = 1
-    for nn in n:
-        p *= nn
-    return p
-
-
-def create_training_grid2(shape):
-    """Create a grid of training data.
-
-    Create a grid of normalized training data described by the input shape.
-
-    The input n is a list containing the numbers of evenly-
-    spaced data points to use in each dimension.  For example, for an
-    (x, y, z) grid, with n = [3, 4, 5], we will get a grid with 3 points
-    along the x-axis, 4 points along the y-axis, and 5 points along the
-    z-axis, for a total of 3*4*5 = 60 points. The points along each dimension
-    are evenly spaced in the range [0, 1]. When there is m = 1 dimension, a
-    list is returned, containing the evenly-spaced points in the single
-    dimension.  When m > 1, a list of lists is returned, where each sub-list
-    is the coordinates of a single point, in the order [x1, x2, ..., xm],
-    where the coordinate order corresponds to the order of coordinate counts
-    in the input list n.
-
-    Parameters
-    ----------
-    shape : list of int
-        List of dimension sizes for training data.
-    
-    Returns
-    -------
-    X : list
-        List of training points
-    """
-
-    # Determine the number of dimensions in the result.
-    m = len(shape)
-
-    # Handle 1-D and (n>1)-D cases differently.
-    if m == 1:
-        n = shape[0]
-        X = [i/(n - 1) for i in range(n)]
-    else:
-        # Compute the evenly-spaced points along each dimension.
-        x = [[i/(n - 1) for i in range(n)] for n in shape]
-
-        # Assemble all possible point combinations.
-        X = []
-        p1 = None
-        p2 = 1
-        for j in range(m - 1):
-            p1 = prod(shape[j + 1:])
-            XX = [xx for item in x[j] for xx in repeat(item, p1)]*p2
-            X.append(XX)
-            p2 *= shape[j]
-        X.append(x[-1]*p2)
-        X = list(zip(*X))
-
-    # Return the list of training points.
-    return X
-
-
-def create_training_data(nx_train, nt_train):
+def create_training_data(x_min, x_max, nx, t_min, t_max, nt):
     """Create the training data.
     
-    Create and return a set of training data of points evenly space in x and
-    t. Flatten the data to a list of pairs of points.
+    Create and return a set of training data of points evenly spaced in x and
+    t. Flatten the data to a list of pairs of points. Also return copies
+    of the data containing only internal points, and only boundary points.
     
     Parameters
     ----------
-    nx_train, nt_train : int
-        Number of points to use in x- and t-dimensions.
+    x_min, x_max : float
+        Minimum and maximum x-values.
+    nx : int
+        Number of points in x-dimension.
+    t_min, t_max : float
+        Minimum and maximum t-values.
+    nt : int
+        Number of points in t-dimension.
     
     Returns
     -------
-    xt_train : np.ndarray, shape (nx_train*nt_train, 2)
-        Array of [x, t] points.
+    xt : np.ndarray, shape (nx*nt, 2)
+        Array of all [x, t] points.
     """
-    xt_train = np.array(create_training_grid2([nx_train, nt_train]), dtype="float32")
-    return xt_train
+    # Create the array of all training points (x, t), looping over t then x.
+    x = np.linspace(x_min, x_max, nx)
+    t = np.linspace(t_min, t_max, nt)
+    X = np.repeat(x, nt)
+    T = np.tile(t, nx)
+    xt = np.vstack([X, T]).T
+
+    # Now split the training data into two groups - inside the BC, and on the BC.
+    # Initialize the mask to keep everything.
+    mask = np.ones(len(xt), dtype=bool)
+    # Mask off the points at x = x_min.
+    mask[:nt] = False
+    # Mask off the points at x = x_max.
+    mask[-nt:] = False
+    # Mask off the points at t = t_min.
+    mask[::nt] = False
+    # Keep t = t_max inside.
+    # mask[nt_train - 1::nx_train] = False
+    xt_in = xt[mask]
+    mask = np.logical_not(mask)
+    xt_bc = xt[mask]
+    return xt, xt_in, xt_bc
 
 
 def build_model(n_layers, H):
@@ -698,16 +649,24 @@ def main():
     # Create and save the training data.
     if verbose:
         print("Creating and saving training data.")
-    xt_train = create_training_data(nx_train, nt_train)
+    xt_train, xt_train_in, xt_train_bc = create_training_data(
+        p.x_min, p.x_max, nx_train,
+        p.t_min, p.t_max, nt_train
+    )
     np.savetxt(os.path.join(output_dir, "xt_train.dat"), xt_train)
     n_train = len(xt_train)
+    np.savetxt(os.path.join(output_dir, "xt_train_in.dat"), xt_train_in)
+    n_train_in = len(xt_train_in)
+    np.savetxt(os.path.join(output_dir, "xt_train_bc.dat"), xt_train_bc)
+    n_train_bc = len(xt_train_bc)
+    assert n_train == n_train_in + n_train_bc
 
-    # Create a copy of the training data with all x = 0.
+    # Create and save a copy of the training data with all x = 0.
     x0t_train = xt_train.copy()
     x0t_train[:, 0] = 0
     np.savetxt(os.path.join(output_dir, "x0t_train.dat"), x0t_train)
 
-    # Create a copy of the training data with all x = 1.
+    # Create and save a copy of the training data with all x = 1.
     x1t_train = xt_train.copy()
     x1t_train[:, 0] = 1
     np.savetxt(os.path.join(output_dir, "x1t_train.dat"), x1t_train)
@@ -750,12 +709,16 @@ def main():
     tf.random.set_seed(seed)
 
     # Rename the training data Variables for convenience.
-    xt_train_var = tf.Variable(xt_train)
+    xt_train_var = tf.Variable(xt_train, dtype="float32")
     xt = xt_train_var
+    xt_train_in_var = tf.Variable(xt_train_in, dtype="float32")
+    xt_in = xt_train_in_var
+    xt_train_bc_var = tf.Variable(xt_train_bc, dtype="float32")
+    xt_bc = xt_train_bc_var
     global x0t, x1t
-    x0t_train_var = tf.Variable(x0t_train)
+    x0t_train_var = tf.Variable(x0t_train, dtype="float32")
     x0t = x0t_train_var
-    x1t_train_var = tf.Variable(x1t_train)
+    x1t_train_var = tf.Variable(x1t_train, dtype="float32")
     x1t = x1t_train_var
 
     # Clear the convergence flag to start.
