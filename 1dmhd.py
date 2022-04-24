@@ -235,7 +235,7 @@ def save_hyperparameters(args, output_dir="."):
         f.write("tol = %s\n" % repr(args.tolerance))
 
 
-def create_training_data(x_min, x_max, nx, t_min, t_max, nt):
+def create_training_data(nx, nt):
     """Create the training data.
     
     Create and return a set of training data of points evenly spaced in x and
@@ -244,23 +244,21 @@ def create_training_data(x_min, x_max, nx, t_min, t_max, nt):
     
     Parameters
     ----------
-    x_min, x_max : float
-        Minimum and maximum x-values.
-    nx : int
-        Number of points in x-dimension.
-    t_min, t_max : float
-        Minimum and maximum t-values.
-    nt : int
-        Number of points in t-dimension.
+    nx, nt : int
+        Number of points in x- and t-dimensions.
     
     Returns
     -------
     xt : np.ndarray, shape (nx*nt, 2)
         Array of all [x, t] points.
+    xt_in : np.ndarray, shape ((nx - 2)*(nt - 1)), 2)
+        Array of all [x, t] points.
+    xt_bc : np.ndarray, shape (2*nt + nx - 2, 2)
+        Array of all [x, t] points.
     """
     # Create the array of all training points (x, t), looping over t then x.
-    x = np.linspace(x_min, x_max, nx)
-    t = np.linspace(t_min, t_max, nt)
+    x = np.linspace(0, 1, nx)
+    t = np.linspace(0, 1, nt)
     X = np.repeat(x, nt)
     T = np.tile(t, nx)
     xt = np.vstack([X, T]).T
@@ -268,11 +266,11 @@ def create_training_data(x_min, x_max, nx, t_min, t_max, nt):
     # Now split the training data into two groups - inside the BC, and on the BC.
     # Initialize the mask to keep everything.
     mask = np.ones(len(xt), dtype=bool)
-    # Mask off the points at x = x_min.
+    # Mask off the points at x = 0.
     mask[:nt] = False
-    # Mask off the points at x = x_max.
+    # Mask off the points at x = 1.
     mask[-nt:] = False
-    # Mask off the points at t = t_min.
+    # Mask off the points at t = 0.
     mask[::nt] = False
     # Keep t = t_max inside.
     # mask[nt_train - 1::nx_train] = False
@@ -650,8 +648,7 @@ def main():
     if verbose:
         print("Creating and saving training data.")
     xt_train, xt_train_in, xt_train_bc = create_training_data(
-        p.x_min, p.x_max, nx_train,
-        p.t_min, p.t_max, nt_train
+        nx_train, nt_train
     )
     np.savetxt(os.path.join(output_dir, "xt_train.dat"), xt_train)
     n_train = len(xt_train)
