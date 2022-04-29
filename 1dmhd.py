@@ -682,16 +682,10 @@ def main():
     model_Bz  = build_model(n_layers, H)
     model_P   = build_model(n_layers, H)
 
-    # Create the optimizers.
+    # Create the optimizer.
     if verbose:
-        print("Creating optimizers.")
-    optimizer_rho = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    optimizer_vx  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    optimizer_vy  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    optimizer_vz  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    optimizer_By  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    optimizer_Bz  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    optimizer_P   = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        print("Creating optimizer.")
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
     # Train the models.
 
@@ -809,13 +803,13 @@ def main():
         pgrad_P   = tape1.gradient(L,   model_P.trainable_variables)
 
         # Update the parameters for this epoch.
-        optimizer_rho.apply_gradients(zip(pgrad_rho, model_rho.trainable_variables))
-        optimizer_vx.apply_gradients(zip( pgrad_vx,   model_vx.trainable_variables))
-        optimizer_vy.apply_gradients(zip( pgrad_vy,   model_vy.trainable_variables))
-        optimizer_vz.apply_gradients(zip( pgrad_vz,   model_vz.trainable_variables))
-        optimizer_By.apply_gradients(zip( pgrad_By,   model_By.trainable_variables))
-        optimizer_Bz.apply_gradients(zip( pgrad_Bz,   model_Bz.trainable_variables))
-        optimizer_P.apply_gradients( zip( pgrad_P,     model_P.trainable_variables))
+        optimizer.apply_gradients(zip(pgrad_rho, model_rho.trainable_variables))
+        optimizer.apply_gradients(zip( pgrad_vx, model_vx.trainable_variables))
+        optimizer.apply_gradients(zip( pgrad_vy, model_vy.trainable_variables))
+        optimizer.apply_gradients(zip( pgrad_vz, model_vz.trainable_variables))
+        optimizer.apply_gradients(zip( pgrad_By, model_By.trainable_variables))
+        optimizer.apply_gradients(zip( pgrad_Bz, model_Bz.trainable_variables))
+        optimizer.apply_gradients( zip( pgrad_P, model_P.trainable_variables))
 
         if verbose and epoch % 1 == 0:
             print("Ending epoch %s, loss function = %f" % (epoch, L.numpy()))
