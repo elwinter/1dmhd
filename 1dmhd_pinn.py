@@ -63,9 +63,12 @@ default_problem = "static"
 # Default random number generator seed.
 default_seed = 0
 
-# Absolute tolerance for consecutive loss function values to indicate
+# Default absolute tolerance for consecutive loss function values to indicate
 # convergence.
 default_tolerance = 1e-6
+
+# Default normalized weight to apply to the boundary condition loss.
+default_w_bc = 0.0
 
 # Name of system information file.
 system_information_file = "system_information.txt"
@@ -143,6 +146,10 @@ def create_command_line_parser():
     parser.add_argument(
         "-v", "--verbose", action="store_true", default=False,
         help="Print verbose output (default: %(default)s)."
+    )
+    parser.add_argument(
+        "-w", "--w_bc", type=float, default=default_w_bc,
+        help="Weight for boundary loss (default: %(default)s)."
     )
     return parser
 
@@ -527,6 +534,7 @@ def main():
     seed = args.seed
     tol = args.tolerance
     verbose = args.verbose
+    w_bc = args.w_bc
     if debug:
         print("args = %s" % args)
 
@@ -571,6 +579,9 @@ def main():
     vz_bc0  = tf.Variable(bc[:, 4], dtype="float32")
     By_bc0  = tf.Variable(bc[:, 5], dtype="float32")
     Bz_bc0  = tf.Variable(bc[:, 6], dtype="float32")
+
+    # Compute the weight for the interior points.
+    w_in = 1.0 - w_bc
 
     # Build the models.
     if verbose:
@@ -689,17 +700,17 @@ def main():
             L_vz_bc  = tf.math.sqrt(tf.reduce_sum(E_vz_bc**2) /n_train_bc)
             L_By_bc  = tf.math.sqrt(tf.reduce_sum(E_By_bc**2) /n_train_bc)
             L_Bz_bc  = tf.math.sqrt(tf.reduce_sum(E_Bz_bc**2) /n_train_bc)
-            L_bc = L_rho_bc + L_vx_bc + L_vy_bc + L_vz_bc + L_By_bc + L_Bz_bc + L_P_bc
+            L_bc = L_rho_bc + L_P_bc + L_vx_bc + L_vy_bc + L_vz_bc + L_By_bc + L_Bz_bc
 
-            # Compute the total losses.
-            L_rho = L_rho_in + L_rho_bc
-            L_vx = L_vx_in + L_vx_bc
-            L_vy = L_vy_in + L_vy_bc
-            L_vz = L_vz_in + L_vz_bc
-            L_By = L_By_in + L_By_bc
-            L_Bz = L_Bz_in + L_Bz_bc
-            L_P = L_P_in + L_P_bc
-            L = L_in + L_bc
+            # Compute the weighted total losses.
+            L_rho = w_in*L_rho_in + w_bc*L_rho_bc
+            L_P =   w_in*L_P_in   + w_bc*L_P_bc
+            L_vx =  w_in*L_vx_in  + w_bc*L_vx_bc
+            L_vy =  w_in*L_vy_in  + w_bc*L_vy_bc
+            L_vz =  w_in*L_vz_in  + w_bc*L_vz_bc
+            L_By =  w_in*L_By_in  + w_bc*L_By_bc
+            L_Bz =  w_in*L_Bz_in  + w_bc*L_Bz_bc
+            L =     w_in*L_in     + w_bc*L_bc
 
         # Save the current losses.
         losses_rho.append(L_rho.numpy())
