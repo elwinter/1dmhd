@@ -560,16 +560,6 @@ def main():
     n_train_bc = len(xt_train_bc)
     assert n_train == n_train_in + n_train_bc
 
-    # Create and save a copy of the training data with all x = 0.
-    x0t_train = xt_train.copy()
-    x0t_train[:, 0] = 0
-    np.savetxt(os.path.join(output_dir, "x0t_train.dat"), x0t_train)
-
-    # Create and save a copy of the training data with all x = 1.
-    x1t_train = xt_train.copy()
-    x1t_train[:, 0] = 1
-    np.savetxt(os.path.join(output_dir, "x1t_train.dat"), x1t_train)
-
     # Build the models.
     if verbose:
         print("Creating neural networks.")
