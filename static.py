@@ -48,6 +48,29 @@ Bz_1  = 0.0
 # 0 = at x = 0 or t = 0
 # 1 = at x = 1 or t = 1
 
+def compute_boundary_conditions(xt_bc):
+    """Compute the boundary conditions."""
+    n = len(xt_bc)
+    rho_bc = np.zeros(n)
+    P_bc = np.zeros(n)
+    vx_bc = np.zeros(n)
+    vy_bc = np.zeros(n)
+    vz_bc = np.zeros(n)
+    By_bc = np.zeros(n)
+    Bz_bc = np.zeros(n)
+    bc = np.zeros((n, 7))  # 7 variables
+    for i in range(n):
+        xt = xt_bc[i]
+        if xt[0] == 0:
+            bc[i] = (rho_0, P_0, vx_0, vy_0, vz_0, By_0, Bz_0)
+        elif xt[0] == 1:
+            bc[i] = (rho_1, P_1, vx_1, vy_0, vz_1, By_1, Bz_1)
+        elif xt[1] == 0:
+            bc[i] = (rho_0, P_0, vx_0, vy_1, vz_0, By_0, Bz_0)
+        else:
+            raise ValueError
+    return bc
+
 # Density
 def f0_rho(xt):
     """Boundary condition for rho at (0, t)."""
