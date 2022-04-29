@@ -116,6 +116,10 @@ def create_command_line_parser():
         help="Maximum number of training epochs (default: %(default)s)"
     )
     parser.add_argument(
+        "--noconvcheck", action="store_true", default=False,
+        help="Do not perform convergence check (default: %(default)s)."
+    )
+    parser.add_argument(
         "--n_hid", type=int, default=default_H,
         help="Number of hidden nodes per layer (default: %(default)s)"
     )
@@ -527,6 +531,7 @@ def main():
     learning_rate = args.learning_rate
     max_epochs = args.max_epochs
     H = args.n_hid
+    noconvcheck = args.noconvcheck
     n_layers = args.n_layers
     nt_train = args.nt_train
     nx_train = args.nx_train
@@ -723,11 +728,12 @@ def main():
         losses.append(    L.numpy())
 
         # Check for convergence.
-        # if epoch > 1:
-        #     loss_delta = losses[-1] - losses[-2]
-        #     if abs(loss_delta) <= tol:
-        #         converged = True
-        #         break
+        if not noconvcheck:
+            if epoch > 1:
+                loss_delta = losses[-1] - losses[-2]
+                if abs(loss_delta) <= tol:
+                    converged = True
+                    break
 
         # Compute the gradient of the loss function wrt the network parameters.
         pgrad_rho = tape1.gradient(L, model_rho.trainable_variables)
