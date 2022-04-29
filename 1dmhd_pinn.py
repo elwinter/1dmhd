@@ -7,6 +7,9 @@ differential equations of one-dimensional ideal MHD.
 
 This code uses the PINN method.
 
+The problem is set up as a 2-point boundary value problem in x, and
+an initial value problem in t.
+
 This code assumes Bx is constant, and so the gradient of Bx is 0.
 
 Author
@@ -74,12 +77,6 @@ hyperparameter_file = "hyperparameters.py"
 w0_range = [-0.1, 0.1]
 u0_range = [-0.1, 0.1]
 v0_range = [-0.1, 0.1]
-
-# Placeholder for training points with all x set to 0.
-x0t = None
-
-# Placeholder for training points with all x set to 1.
-x1t = None
 
 
 # Program global variables.
@@ -316,101 +313,6 @@ def build_model(n_layers, H):
     layers.append(output_layer)
     model = tf.keras.Sequential(layers)
     return model
-
-
-# Define the trial functions.
-
-# @tf.function
-def Ytrial_rho(xt, N):
-    """Trial solution for rho."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_rho
-    f1 = p.f1_rho
-    g0 = p.g0_rho
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
-
-# @tf.function
-def Ytrial_vx(xt, N):
-    """Trial solution for vx."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_vx
-    f1 = p.f1_vx
-    g0 = p.g0_vx
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
-
-# @tf.function
-def Ytrial_vy(xt, N):
-    """Trial solution for vy."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_vy
-    f1 = p.f1_vy
-    g0 = p.g0_vy
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
-
-# @tf.function
-def Ytrial_vz(xt, N):
-    """Trial solution for vz."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_vz
-    f1 = p.f1_vz
-    g0 = p.g0_vz
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
-
-
-# @tf.function
-def Ytrial_By(xt, N):
-    """Trial solution for By."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_By
-    f1 = p.f1_By
-    g0 = p.g0_By
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
-
-# @tf.function
-def Ytrial_Bz(xt, N):
-    """Trial solution for Bz."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_Bz
-    f1 = p.f1_Bz
-    g0 = p.g0_Bz
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
-
-# @tf.function
-def Ytrial_P(xt, N):
-    """Trial solution for P."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    f0 = p.f0_P
-    f1 = p.f1_P
-    g0 = p.g0_P
-    A = (1 - x)*f0(xt) + x*f1(xt) + (1 - t)*(g0(xt) - ((1 - x)*g0(x0t) + x*g0(x1t)))
-    P = x*(1 - x)*t
-    Y = A + P*N[:, 0]
-    return Y
 
 
 # Define the differential equations using TensorFlow operations.
@@ -672,34 +574,34 @@ def main():
     if verbose:
         print("Creating neural networks.")
     model_rho = build_model(n_layers, H)
+    model_P   = build_model(n_layers, H)
     model_vx  = build_model(n_layers, H)
     model_vy  = build_model(n_layers, H)
     model_vz  = build_model(n_layers, H)
     model_By  = build_model(n_layers, H)
     model_Bz  = build_model(n_layers, H)
-    model_P   = build_model(n_layers, H)
 
     # Create the optimizers.
     if verbose:
         print("Creating optimizers.")
     optimizer_rho = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    optimizer_P   = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     optimizer_vx  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     optimizer_vy  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     optimizer_vz  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     optimizer_By  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     optimizer_Bz  = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    optimizer_P   = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
     # Train the models.
 
     # Create history variables.
     losses_rho = []
+    losses_P   = []
     losses_vx  = []
     losses_vy  = []
     losses_vz  = []
     losses_By  = []
     losses_Bz  = []
-    losses_P   = []
     losses     = []
 
     # Set the random number seed for reproducibility.
@@ -712,11 +614,6 @@ def main():
     xt_in = xt_train_in_var
     xt_train_bc_var = tf.Variable(xt_train_bc, dtype="float32")
     xt_bc = xt_train_bc_var
-    global x0t, x1t
-    x0t_train_var = tf.Variable(x0t_train, dtype="float32")
-    x0t = x0t_train_var
-    x1t_train_var = tf.Variable(x1t_train, dtype="float32")
-    x1t = x1t_train_var
 
     # Clear the convergence flag to start.
     converged = False
@@ -731,88 +628,79 @@ def main():
         with tf.GradientTape(persistent=True) as tape1:
             with tf.GradientTape(persistent=True) as tape0:
 
-                # Compute the network outputs at the training points.
-                N_rho = model_rho(xt)
-                N_vx  = model_vx( xt)
-                N_vy  = model_vy( xt)
-                N_vz  = model_vz( xt)
-                N_By  = model_By( xt)
-                N_Bz  = model_Bz( xt)
-                N_P   = model_P(  xt)
-
                 # Compute the trial solutions.
-                rho = Ytrial_rho(xt, N_rho)
-                vx  = Ytrial_vx( xt, N_vx)
-                vy  = Ytrial_vy( xt, N_vy)
-                vz  = Ytrial_vz( xt, N_vz)
-                By  = Ytrial_By( xt, N_By)
-                Bz  = Ytrial_Bz( xt, N_Bz)
-                P   = Ytrial_P(  xt, N_P)
+                rho = model_rho(xt)
+                P   = model_P(  xt)
+                vx  = model_vx( xt)
+                vy  = model_vy( xt)
+                vz  = model_vz( xt)
+                By  = model_By( xt)
+                Bz  = model_Bz( xt)
 
             # Compute the gradients of the trial solutions wrt inputs.
             del_rho = tape0.gradient(rho, xt)
+            del_P   = tape0.gradient(P,   xt)
             del_vx  = tape0.gradient(vx,  xt)
             del_vy  = tape0.gradient(vy,  xt)
             del_vz  = tape0.gradient(vz,  xt)
             del_By  = tape0.gradient(By,  xt)
             del_Bz  = tape0.gradient(Bz,  xt)
-            del_P   = tape0.gradient(P,   xt)
 
             # Compute the estimates of the differential equations.
             Y = [rho, vx, vy, vz, By, Bz, P]
             del_Y = [del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P]
             G_rho = pde_rho(xt, Y, del_Y)
+            G_P   =   pde_P(xt, Y, del_Y)
             G_vx  =  pde_vx(xt, Y, del_Y)
             G_vy  =  pde_vy(xt, Y, del_Y)
             G_vz  =  pde_vz(xt, Y, del_Y)
             G_By  =  pde_By(xt, Y, del_Y)
             G_Bz  =  pde_Bz(xt, Y, del_Y)
-            G_P   =   pde_P(xt, Y, del_Y)
 
             # Compute the loss functions.
             L_rho = tf.math.sqrt(tf.reduce_sum(G_rho**2)/n_train)
+            L_P   = tf.math.sqrt(tf.reduce_sum(G_P**2)  /n_train)
             L_vx  = tf.math.sqrt(tf.reduce_sum(G_vx**2) /n_train)
             L_vy  = tf.math.sqrt(tf.reduce_sum(G_vy**2) /n_train)
             L_vz  = tf.math.sqrt(tf.reduce_sum(G_vz**2) /n_train)
             L_By  = tf.math.sqrt(tf.reduce_sum(G_By**2) /n_train)
             L_Bz  = tf.math.sqrt(tf.reduce_sum(G_Bz**2) /n_train)
-            L_P   = tf.math.sqrt(tf.reduce_sum(G_P**2)  /n_train)
-            L = L_rho + L_vx + L_vy + L_vz + L_By + L_Bz + L_P
+            L = L_rho + L_P + L_vx + L_vy + L_vz + L_By + L_Bz
 
         # Save the current losses.
         losses_rho.append(L_rho.numpy())
+        losses_P.append(  L_P.numpy())
         losses_vx.append( L_vx.numpy())
         losses_vy.append( L_vy.numpy())
         losses_vz.append( L_vz.numpy())
         losses_By.append( L_By.numpy())
         losses_Bz.append( L_Bz.numpy())
-        losses_P.append(  L_P.numpy())
         losses.append(    L.numpy())
 
-#         # Check for convergence.
-#         # if epoch > 1:
-#         #     loss_delta = losses[-1] - losses[-2]
-#         #     if abs(loss_delta) <= tol:
-#         #         converged = True
-#         #         break
+        # Check for convergence.
+        # if epoch > 1:
+        #     loss_delta = losses[-1] - losses[-2]
+        #     if abs(loss_delta) <= tol:
+        #         converged = True
+        #         break
 
         # Compute the gradient of the loss function wrt the network parameters.
         pgrad_rho = tape1.gradient(L, model_rho.trainable_variables)
+        pgrad_P   = tape1.gradient(L,   model_P.trainable_variables)
         pgrad_vx  = tape1.gradient(L,  model_vx.trainable_variables)
         pgrad_vy  = tape1.gradient(L,  model_vy.trainable_variables)
         pgrad_vz  = tape1.gradient(L,  model_vz.trainable_variables)
         pgrad_By  = tape1.gradient(L,  model_By.trainable_variables)
         pgrad_Bz  = tape1.gradient(L,  model_Bz.trainable_variables)
-        pgrad_P   = tape1.gradient(L,   model_P.trainable_variables)
 
         # Update the parameters for this epoch.
         optimizer_rho.apply_gradients(zip(pgrad_rho, model_rho.trainable_variables))
+        optimizer_P.apply_gradients( zip( pgrad_P,     model_P.trainable_variables))
         optimizer_vx.apply_gradients(zip( pgrad_vx,   model_vx.trainable_variables))
         optimizer_vy.apply_gradients(zip( pgrad_vy,   model_vy.trainable_variables))
         optimizer_vz.apply_gradients(zip( pgrad_vz,   model_vz.trainable_variables))
         optimizer_By.apply_gradients(zip( pgrad_By,   model_By.trainable_variables))
         optimizer_Bz.apply_gradients(zip( pgrad_Bz,   model_Bz.trainable_variables))
-        optimizer_P.apply_gradients( zip( pgrad_P,     model_P.trainable_variables))
 
         if verbose and epoch % 1 == 0:
             print("Ending epoch %s, loss function = %f" % (epoch, L.numpy()))
@@ -833,12 +721,12 @@ def main():
     if verbose:
         print("Saving loss function histories.")
     np.savetxt(os.path.join(output_dir, 'losses_rho.dat'), np.array(losses_rho))
+    np.savetxt(os.path.join(output_dir, 'losses_P.dat'),   np.array(losses_P))
     np.savetxt(os.path.join(output_dir, 'losses_vx.dat'),  np.array(losses_vx))
     np.savetxt(os.path.join(output_dir, 'losses_vy.dat'),  np.array(losses_vy))
     np.savetxt(os.path.join(output_dir, 'losses_vz.dat'),  np.array(losses_vz))
     np.savetxt(os.path.join(output_dir, 'losses_By.dat'),  np.array(losses_By))
     np.savetxt(os.path.join(output_dir, 'losses_Bz.dat'),  np.array(losses_Bz))
-    np.savetxt(os.path.join(output_dir, 'losses_P.dat'),   np.array(losses_P))
     np.savetxt(os.path.join(output_dir, 'losses.dat'),     np.array(losses))
 
     # Compute and save the trained results at training points.
@@ -846,31 +734,22 @@ def main():
         print("Computing and saving trained results.")
     with tf.GradientTape(persistent=True) as tape:
 
-        # Compute the network outputs at the training points.
-        N_rho = model_rho(xt)
-        N_vx  = model_vx( xt)
-        N_vy  = model_vy( xt)
-        N_vz  = model_vz( xt)
-        N_By  = model_By( xt)
-        N_Bz  = model_Bz( xt)
-        N_P   = model_P(  xt)
-
         # Compute the trial solutions.
-        rho_train = Ytrial_rho(xt, N_rho)
-        vx_train  = Ytrial_vx( xt, N_vx)
-        vy_train  = Ytrial_vy( xt, N_vy)
-        vz_train  = Ytrial_vz( xt, N_vz)
-        By_train  = Ytrial_By( xt, N_By)
-        Bz_train  = Ytrial_Bz( xt, N_Bz)
-        P_train   = Ytrial_P(  xt, N_P)
+        rho_train = model_rho(xt)
+        P_train   = model_P(  xt)
+        vx_train  = model_vx( xt)
+        vy_train  = model_vy( xt)
+        vz_train  = model_vz( xt)
+        By_train  = model_By( xt)
+        Bz_train  = model_Bz( xt)
 
     np.savetxt(os.path.join(output_dir, "rho_train.dat"), rho_train.numpy().reshape((n_train,)))
+    np.savetxt(os.path.join(output_dir, "P_train.dat"),     P_train.numpy().reshape((n_train,)))
     np.savetxt(os.path.join(output_dir, "vx_train.dat"),   vx_train.numpy().reshape((n_train,)))
     np.savetxt(os.path.join(output_dir, "vy_train.dat"),   vy_train.numpy().reshape((n_train,)))
     np.savetxt(os.path.join(output_dir, "vz_train.dat"),   vz_train.numpy().reshape((n_train,)))
     np.savetxt(os.path.join(output_dir, "By_train.dat"),   By_train.numpy().reshape((n_train,)))
     np.savetxt(os.path.join(output_dir, "Bz_train.dat"),   Bz_train.numpy().reshape((n_train,)))
-    np.savetxt(os.path.join(output_dir, "P_train.dat"),     P_train.numpy().reshape((n_train,)))
 
 
 if __name__ == "__main__":
