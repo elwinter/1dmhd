@@ -353,8 +353,8 @@ def pde_rho(xt, Y, del_Y):
     """Differential equation for rho."""
     x = xt[:, 0]
     t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
+    (rho, P, vx, vy, vz, By, Bz) = Y
+    (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
     drho_dx = del_rho[:, 0]
     drho_dt = del_rho[:, 1]
     dvx_dx  =  del_vx[:, 0]
@@ -362,110 +362,12 @@ def pde_rho(xt, Y, del_Y):
     return G
 
 # @tf.function
-def pde_vx(xt, Y, del_Y):
-    """Differential equation for vx."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    drho_dx = del_rho[:, 0]
-    drho_dt = del_rho[:, 1]
-    dvx_dx  =  del_vx[:, 0]
-    dvx_dt  =  del_vx[:, 1]
-    dBy_dx  =  del_By[:, 0]
-    dBz_dx  =  del_Bz[:, 0]
-    dP_dx   =   del_P[:, 0]
-    # dBx_dx is 0.
-    dPtot_dx = dP_dx + By*dBy_dx + Bz*dBz_dx
-    G = (
-        rho*dvx_dt + drho_dt*vx
-        + rho*2*vx*dvx_dx + drho_dx*vx**2 + dPtot_dx
-    )
-    return G
-
-# @tf.function
-def pde_vy(xt, Y, del_Y):
-    """Differential equation for vy."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    Bx = p.Bx_0
-    drho_dx = del_rho[:, 0]
-    drho_dt = del_rho[:, 1]
-    dvx_dx  =  del_vx[:, 0]
-    dvy_dx  =  del_vy[:, 0]
-    dvy_dt  =  del_vy[:, 1]
-    dBy_dx  =  del_By[:, 0]
-    # dBx_dx is 0.
-    G = (
-        rho*dvy_dt + drho_dt*vy
-        + rho*vx*dvy_dx + rho*dvx_dx*vy + drho_dx*vx*vy
-        - Bx*dBy_dx
-    )
-    return G
-
-# @tf.function
-def pde_vz(xt, Y, del_Y):
-    """Differential equation for vz."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    Bx = p.Bx_0
-    drho_dx = del_rho[:, 0]
-    drho_dt = del_rho[:, 1]
-    dvx_dx  =  del_vx[:, 0]
-    dvz_dx  =  del_vz[:, 0]
-    dvz_dt  =  del_vz[:, 1]
-    dBz_dx  =  del_Bz[:, 0]
-    # dBx_dx is 0.
-    G = (
-        rho*dvz_dt + drho_dt*vz
-        + rho*vx*dvz_dx + rho*dvx_dx*vz + drho_dx*vx*vz
-        - Bx*dBz_dx
-    )
-    return G
-
-# @tf.function
-def pde_By(xt, Y, del_Y):
-    """Differential equation for By."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    Bx = p.Bx_0
-    dvx_dx = del_vx[:, 0]
-    dvy_dx = del_vy[:, 0]
-    dBy_dx = del_By[:, 0]
-    dBy_dt = del_By[:, 1]
-    # dBx_dx is 0.
-    G = dBy_dt + By*dvx_dx + dBy_dx*vx - Bx*dvy_dx
-    return G
-
-# @tf.function
-def pde_Bz(xt, Y, del_Y):
-    """Differential equation for Bz."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    Bx = p.Bx_0
-    dvx_dx  = del_vx[:, 0]
-    dvz_dx  = del_vz[:, 0]
-    dBz_dx  = del_Bz[:, 0]
-    dBz_dt  = del_Bz[:, 1]
-    # dBx_dx is 0.
-    G = dBz_dt + Bz*dvx_dx + dBz_dx*vx - Bx*dvz_dx
-    return G
-
-# @tf.function
 def pde_P(xt, Y, del_Y):
     """Differential equation for P (actually E)."""
     x = xt[:, 0]
     t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
+    (rho, P, vx, vy, vz, By, Bz) = Y
+    (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
     Bx = p.Bx_0
     drho_dx  = del_rho[:, 0]
     drho_dt  = del_rho[:, 1]
@@ -505,6 +407,104 @@ def pde_P(xt, Y, del_Y):
         dE_dt + (E + Ptot)*dvx_dx + (dE_dx + dPtot_dx)*vx
         - Bx*(Bx*dvx_dx + By*dvy_dx + dBy_dx*vy + Bz*dvz_dx + dBz_dx*vz)
     )
+    return G
+
+# @tf.function
+def pde_vx(xt, Y, del_Y):
+    """Differential equation for vx."""
+    x = xt[:, 0]
+    t = xt[:, 1]
+    (rho, P, vx, vy, vz, By, Bz) = Y
+    (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    drho_dx = del_rho[:, 0]
+    drho_dt = del_rho[:, 1]
+    dvx_dx  =  del_vx[:, 0]
+    dvx_dt  =  del_vx[:, 1]
+    dBy_dx  =  del_By[:, 0]
+    dBz_dx  =  del_Bz[:, 0]
+    dP_dx   =   del_P[:, 0]
+    # dBx_dx is 0.
+    dPtot_dx = dP_dx + By*dBy_dx + Bz*dBz_dx
+    G = (
+        rho*dvx_dt + drho_dt*vx
+        + rho*2*vx*dvx_dx + drho_dx*vx**2 + dPtot_dx
+    )
+    return G
+
+# @tf.function
+def pde_vy(xt, Y, del_Y):
+    """Differential equation for vy."""
+    x = xt[:, 0]
+    t = xt[:, 1]
+    (rho, P, vx, vy, vz, By, Bz) = Y
+    (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    Bx = p.Bx_0
+    drho_dx = del_rho[:, 0]
+    drho_dt = del_rho[:, 1]
+    dvx_dx  =  del_vx[:, 0]
+    dvy_dx  =  del_vy[:, 0]
+    dvy_dt  =  del_vy[:, 1]
+    dBy_dx  =  del_By[:, 0]
+    # dBx_dx is 0.
+    G = (
+        rho*dvy_dt + drho_dt*vy
+        + rho*vx*dvy_dx + rho*dvx_dx*vy + drho_dx*vx*vy
+        - Bx*dBy_dx
+    )
+    return G
+
+# @tf.function
+def pde_vz(xt, Y, del_Y):
+    """Differential equation for vz."""
+    x = xt[:, 0]
+    t = xt[:, 1]
+    (rho, P, vx, vy, vz, By, Bz) = Y
+    (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    Bx = p.Bx_0
+    drho_dx = del_rho[:, 0]
+    drho_dt = del_rho[:, 1]
+    dvx_dx  =  del_vx[:, 0]
+    dvz_dx  =  del_vz[:, 0]
+    dvz_dt  =  del_vz[:, 1]
+    dBz_dx  =  del_Bz[:, 0]
+    # dBx_dx is 0.
+    G = (
+        rho*dvz_dt + drho_dt*vz
+        + rho*vx*dvz_dx + rho*dvx_dx*vz + drho_dx*vx*vz
+        - Bx*dBz_dx
+    )
+    return G
+
+# @tf.function
+def pde_By(xt, Y, del_Y):
+    """Differential equation for By."""
+    x = xt[:, 0]
+    t = xt[:, 1]
+    (rho, P, vx, vy, vz, By, Bz) = Y
+    (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    Bx = p.Bx_0
+    dvx_dx = del_vx[:, 0]
+    dvy_dx = del_vy[:, 0]
+    dBy_dx = del_By[:, 0]
+    dBy_dt = del_By[:, 1]
+    # dBx_dx is 0.
+    G = dBy_dt + By*dvx_dx + dBy_dx*vx - Bx*dvy_dx
+    return G
+
+# @tf.function
+def pde_Bz(xt, Y, del_Y):
+    """Differential equation for Bz."""
+    x = xt[:, 0]
+    t = xt[:, 1]
+    (rho, P, vx, vy, vz, By, Bz) = Y
+    (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    Bx = p.Bx_0
+    dvx_dx  = del_vx[:, 0]
+    dvz_dx  = del_vz[:, 0]
+    dBz_dx  = del_Bz[:, 0]
+    dBz_dt  = del_Bz[:, 1]
+    # dBx_dx is 0.
+    G = dBz_dt + Bz*dvx_dx + dBz_dx*vx - Bx*dvz_dx
     return G
 
 
@@ -560,6 +560,18 @@ def main():
     n_train_bc = len(xt_train_bc)
     assert n_train == n_train_in + n_train_bc
 
+    # Compute the boundary condition values.
+    if verbose:
+        print("Computing boundary conditions.")
+    bc = p.compute_boundary_conditions(xt_train_bc)
+    rho_bc0 = tf.Variable(bc[:, 0], dtype="float32")
+    P_bc0   = tf.Variable(bc[:, 1], dtype="float32")
+    vx_bc0  = tf.Variable(bc[:, 2], dtype="float32")
+    vy_bc0  = tf.Variable(bc[:, 3], dtype="float32")
+    vz_bc0  = tf.Variable(bc[:, 4], dtype="float32")
+    By_bc0  = tf.Variable(bc[:, 5], dtype="float32")
+    Bz_bc0  = tf.Variable(bc[:, 6], dtype="float32")
+
     # Build the models.
     if verbose:
         print("Creating neural networks.")
@@ -612,44 +624,82 @@ def main():
         with tf.GradientTape(persistent=True) as tape1:
             with tf.GradientTape(persistent=True) as tape0:
 
-                # Compute the trial solutions.
-                rho = model_rho(xt)
-                P   = model_P(  xt)
-                vx  = model_vx( xt)
-                vy  = model_vy( xt)
-                vz  = model_vz( xt)
-                By  = model_By( xt)
-                Bz  = model_Bz( xt)
+                # Compute the network outputs within the domain.
+                rho_in = model_rho(xt_in)
+                P_in   = model_P(  xt_in)
+                vx_in  = model_vx( xt_in)
+                vy_in  = model_vy( xt_in)
+                vz_in  = model_vz( xt_in)
+                By_in  = model_By( xt_in)
+                Bz_in  = model_Bz( xt_in)
 
-            # Compute the gradients of the trial solutions wrt inputs.
-            del_rho = tape0.gradient(rho, xt)
-            del_P   = tape0.gradient(P,   xt)
-            del_vx  = tape0.gradient(vx,  xt)
-            del_vy  = tape0.gradient(vy,  xt)
-            del_vz  = tape0.gradient(vz,  xt)
-            del_By  = tape0.gradient(By,  xt)
-            del_Bz  = tape0.gradient(Bz,  xt)
+                # Compute the network outputs on the boundaries.
+                rho_bc = model_rho(xt_bc)
+                P_bc   = model_P(  xt_bc)
+                vx_bc  = model_vx( xt_bc)
+                vy_bc  = model_vy( xt_bc)
+                vz_bc  = model_vz( xt_bc)
+                By_bc  = model_By( xt_bc)
+                Bz_bc  = model_Bz( xt_bc)
 
-            # Compute the estimates of the differential equations.
-            Y = [rho, vx, vy, vz, By, Bz, P]
-            del_Y = [del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P]
-            G_rho = pde_rho(xt, Y, del_Y)
-            G_P   =   pde_P(xt, Y, del_Y)
-            G_vx  =  pde_vx(xt, Y, del_Y)
-            G_vy  =  pde_vy(xt, Y, del_Y)
-            G_vz  =  pde_vz(xt, Y, del_Y)
-            G_By  =  pde_By(xt, Y, del_Y)
-            G_Bz  =  pde_Bz(xt, Y, del_Y)
+            # Compute the gradients of the network outputs wrt inputs at the interior training points.
+            del_rho_in = tape0.gradient(rho_in, xt_in)
+            del_P_in   = tape0.gradient(P_in,   xt_in)
+            del_vx_in  = tape0.gradient(vx_in,  xt_in)
+            del_vy_in  = tape0.gradient(vy_in,  xt_in)
+            del_vz_in  = tape0.gradient(vz_in,  xt_in)
+            del_By_in  = tape0.gradient(By_in,  xt_in)
+            del_Bz_in  = tape0.gradient(Bz_in,  xt_in)
 
-            # Compute the loss functions.
-            L_rho = tf.math.sqrt(tf.reduce_sum(G_rho**2)/n_train)
-            L_P   = tf.math.sqrt(tf.reduce_sum(G_P**2)  /n_train)
-            L_vx  = tf.math.sqrt(tf.reduce_sum(G_vx**2) /n_train)
-            L_vy  = tf.math.sqrt(tf.reduce_sum(G_vy**2) /n_train)
-            L_vz  = tf.math.sqrt(tf.reduce_sum(G_vz**2) /n_train)
-            L_By  = tf.math.sqrt(tf.reduce_sum(G_By**2) /n_train)
-            L_Bz  = tf.math.sqrt(tf.reduce_sum(G_Bz**2) /n_train)
-            L = L_rho + L_P + L_vx + L_vy + L_vz + L_By + L_Bz
+            # Compute the estimates of the differential equations at the interior training points.
+            Y_in = [rho_in, P_in, vx_in, vy_in, vz_in, By_in, Bz_in]
+            del_Y_in = [del_rho_in, del_P_in, del_vx_in, del_vy_in, del_vz_in, del_By_in, del_Bz_in]
+            G_rho_in = pde_rho(xt_in, Y_in, del_Y_in)
+            G_P_in   =   pde_P(xt_in, Y_in, del_Y_in)
+            G_vx_in  = pde_vx( xt_in, Y_in, del_Y_in)
+            G_vy_in  =  pde_vy(xt_in, Y_in, del_Y_in)
+            G_vz_in  =  pde_vz(xt_in, Y_in, del_Y_in)
+            G_By_in  =  pde_By(xt_in, Y_in, del_Y_in)
+            G_Bz_in  =  pde_Bz(xt_in, Y_in, del_Y_in)
+
+            # Compute the errors in the computed BC.
+            E_rho_bc = rho_bc - rho_bc0
+            E_P_bc   = P_bc - P_bc0
+            E_vx_bc  = vx_bc - vx_bc0
+            E_vy_bc  = vy_bc - vy_bc0
+            E_vz_bc  = vz_bc - vz_bc0
+            E_By_bc  = By_bc - By_bc0
+            E_Bz_bc  = Bz_bc - Bz_bc0
+
+            # Compute the loss functions for the interior training points.
+            L_rho_in = tf.math.sqrt(tf.reduce_sum(G_rho_in**2)/n_train_in)
+            L_P_in   = tf.math.sqrt(tf.reduce_sum(G_P_in**2)  /n_train_in)
+            L_vx_in  = tf.math.sqrt(tf.reduce_sum(G_vx_in**2) /n_train_in)
+            L_vy_in  = tf.math.sqrt(tf.reduce_sum(G_vy_in**2) /n_train_in)
+            L_vz_in  = tf.math.sqrt(tf.reduce_sum(G_vz_in**2) /n_train_in)
+            L_By_in  = tf.math.sqrt(tf.reduce_sum(G_By_in**2) /n_train_in)
+            L_Bz_in  = tf.math.sqrt(tf.reduce_sum(G_Bz_in**2) /n_train_in)
+            L_in = L_rho_in + L_P_in + L_vx_in + L_vy_in + L_vz_in + L_By_in + L_Bz_in
+
+            # Compute the loss functions for the boundary points.
+            L_rho_bc = tf.math.sqrt(tf.reduce_sum(E_rho_bc**2)/n_train_bc)
+            L_P_bc   = tf.math.sqrt(tf.reduce_sum(E_P_bc**2)  /n_train_bc)
+            L_vx_bc  = tf.math.sqrt(tf.reduce_sum(E_vx_bc**2) /n_train_bc)
+            L_vy_bc  = tf.math.sqrt(tf.reduce_sum(E_vy_bc**2) /n_train_bc)
+            L_vz_bc  = tf.math.sqrt(tf.reduce_sum(E_vz_bc**2) /n_train_bc)
+            L_By_bc  = tf.math.sqrt(tf.reduce_sum(E_By_bc**2) /n_train_bc)
+            L_Bz_bc  = tf.math.sqrt(tf.reduce_sum(E_Bz_bc**2) /n_train_bc)
+            L_bc = L_rho_bc + L_vx_bc + L_vy_bc + L_vz_bc + L_By_bc + L_Bz_bc + L_P_bc
+
+            # Compute the total losses.
+            L_rho = L_rho_in + L_rho_bc
+            L_vx = L_vx_in + L_vx_bc
+            L_vy = L_vy_in + L_vy_bc
+            L_vz = L_vz_in + L_vz_bc
+            L_By = L_By_in + L_By_bc
+            L_Bz = L_Bz_in + L_Bz_bc
+            L_P = L_P_in + L_P_bc
+            L = L_in + L_bc
 
         # Save the current losses.
         losses_rho.append(L_rho.numpy())
@@ -662,11 +712,11 @@ def main():
         losses.append(    L.numpy())
 
         # Check for convergence.
-        if epoch > 1:
-            loss_delta = losses[-1] - losses[-2]
-            if abs(loss_delta) <= tol:
-                converged = True
-                break
+        # if epoch > 1:
+        #     loss_delta = losses[-1] - losses[-2]
+        #     if abs(loss_delta) <= tol:
+        #         converged = True
+        #         break
 
         # Compute the gradient of the loss function wrt the network parameters.
         pgrad_rho = tape1.gradient(L, model_rho.trainable_variables)
