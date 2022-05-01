@@ -368,7 +368,10 @@ def build_model(n_layers, H, activation="sigmoid"):
 
 # The original equations are:
 
-# For 1-D flow, div(B) = 0, so Bx is constant.
+# For 1-D flow
+# div(B) = 0 = dBx/dx + dBy/dy + dBz/dz
+# Bx is constant,
+# dBy/dy + dBz/dz = 0 => dBy/dy = - dBz/dz
 
 # The general form of each differential equation is (d are
 # partial derivatives)
@@ -379,8 +382,8 @@ def build_model(n_layers, H, activation="sigmoid"):
 
 #           / rho*vx                       \
 #          |  rho*vx**2 + Ptot - Bx**2      |
-#      F = |  rho*vx*vy - Bx*By             |
-#          |  rho*vx*vz - Bx*Bz             |
+#          |  rho*vx*vy - Bx*By             |
+#      F = |  rho*vx*vz - Bx*Bz             |
 #          |  By*vx - Bx*vy                 |
 #          |  Bz*vx - Bx*vz                 |
 #           \ (E + Ptot)*vx - Bx*(B dot v) /
@@ -390,8 +393,8 @@ def build_model(n_layers, H, activation="sigmoid"):
 #     P = (gamma - 1)*(E - rho*v**2/2 - B**2/2)
 
 # xt is the tf.Variable [x, t] of all of the training points.
-# Y is the list of tf.Variable [rho, vx, vy, vz, By, Bz, P]
-# del_Y is the list of gradients [del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P]
+# Y is the list of tf.Variable [rho, P, vx, vy, vz, By, Bz]
+# del_Y is the list of gradients [del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz]
 
 # @tf.function
 def pde_rho(xt, Y, del_Y):
@@ -422,6 +425,7 @@ def pde_P(xt, Y, del_Y):
     dvy_dt   =  del_vy[:, 1]
     dvz_dx   =  del_vz[:, 0]
     dvz_dt   =  del_vz[:, 1]
+    dBx_dx   = 0
     dBy_dx   =  del_By[:, 0]
     dBy_dt   =  del_By[:, 1]
     dBz_dx   =  del_Bz[:, 0]
@@ -450,7 +454,8 @@ def pde_P(xt, Y, del_Y):
     )
     G = (
         dE_dt + (E + Ptot)*dvx_dx + (dE_dx + dPtot_dx)*vx
-        - Bx*(Bx*dvx_dx + By*dvy_dx + dBy_dx*vy + Bz*dvz_dx + dBz_dx*vz)
+        - Bx*(Bx*dvx_dx + dBx_dx*vx + By*dvy_dx + dBy_dx*vy + Bz*dvz_dx + dBz_dx*vz)
+        - dBx_dx*(Bx*vx + By*vy + Bz*vz)
     )
     return G
 
@@ -461,18 +466,19 @@ def pde_vx(xt, Y, del_Y):
     t = xt[:, 1]
     (rho, P, vx, vy, vz, By, Bz) = Y
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    Bx = p.Bx_0
     drho_dx = del_rho[:, 0]
     drho_dt = del_rho[:, 1]
     dvx_dx  =  del_vx[:, 0]
     dvx_dt  =  del_vx[:, 1]
+    dBx_dx  = 0.0
     dBy_dx  =  del_By[:, 0]
     dBz_dx  =  del_Bz[:, 0]
     dP_dx   =   del_P[:, 0]
-    # dBx_dx is 0.
     dPtot_dx = dP_dx + By*dBy_dx + Bz*dBz_dx
     G = (
         rho*dvx_dt + drho_dt*vx
-        + rho*2*vx*dvx_dx + drho_dx*vx**2 + dPtot_dx
+        + rho*2*vx*dvx_dx + drho_dx*vx**2 + dPtot_dx - 2*Bx*dBx_dx
     )
     return G
 
@@ -489,12 +495,12 @@ def pde_vy(xt, Y, del_Y):
     dvx_dx  =  del_vx[:, 0]
     dvy_dx  =  del_vy[:, 0]
     dvy_dt  =  del_vy[:, 1]
+    dBx_dx  = 0.0
     dBy_dx  =  del_By[:, 0]
-    # dBx_dx is 0.
     G = (
         rho*dvy_dt + drho_dt*vy
-        + rho*vx*dvy_dx + rho*dvx_dx*vy + drho_dx*vx*vy
-        - Bx*dBy_dx
+        + rho*(vx*dvy_dx + dvx_dx*vy) + drho_dx*vx*vy
+        - Bx*dBy_dx - dBx_dx*By
     )
     return G
 
@@ -511,12 +517,12 @@ def pde_vz(xt, Y, del_Y):
     dvx_dx  =  del_vx[:, 0]
     dvz_dx  =  del_vz[:, 0]
     dvz_dt  =  del_vz[:, 1]
+    dBx_dx  = 0.0
     dBz_dx  =  del_Bz[:, 0]
-    # dBx_dx is 0.
     G = (
         rho*dvz_dt + drho_dt*vz
-        + rho*vx*dvz_dx + rho*dvx_dx*vz + drho_dx*vx*vz
-        - Bx*dBz_dx
+        + rho*(vx*dvz_dx + dvx_dx*vz) + drho_dx*vx*vz
+        - Bx*dBz_dx - dBx_dx*Bz
     )
     return G
 
@@ -530,10 +536,10 @@ def pde_By(xt, Y, del_Y):
     Bx = p.Bx_0
     dvx_dx = del_vx[:, 0]
     dvy_dx = del_vy[:, 0]
+    dBx_dx = 0
     dBy_dx = del_By[:, 0]
     dBy_dt = del_By[:, 1]
-    # dBx_dx is 0.
-    G = dBy_dt + By*dvx_dx + dBy_dx*vx - Bx*dvy_dx
+    G = dBy_dt + By*dvx_dx + dBy_dx*vx - Bx*dvy_dx - dBx_dx*vy
     return G
 
 # @tf.function
@@ -546,10 +552,10 @@ def pde_Bz(xt, Y, del_Y):
     Bx = p.Bx_0
     dvx_dx  = del_vx[:, 0]
     dvz_dx  = del_vz[:, 0]
+    dBx_dx = 0
     dBz_dx  = del_Bz[:, 0]
     dBz_dt  = del_Bz[:, 1]
-    # dBx_dx is 0.
-    G = dBz_dt + Bz*dvx_dx + dBz_dx*vx - Bx*dvz_dx
+    G = dBz_dt + Bz*dvx_dx + dBz_dx*vx - Bx*dvz_dx - dBx_dx*vz
     return G
 
 

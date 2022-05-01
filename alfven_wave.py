@@ -17,7 +17,7 @@ import tensorflow as tf
 
 
 # Adiabatic index.
-gamma = 1.4
+gamma = 2.0
 
 # Inlet conditions
 rho_0 = 1.0
