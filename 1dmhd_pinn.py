@@ -39,6 +39,9 @@ import tensorflow as tf
 # Program description.
 description = "Solve the 1-D MHD equations with a set of neural networks, using the PINN method."
 
+# Default activation function to use in hidden nodes.
+default_activation = "sigmoid"
+
 # Default learning rate.
 default_learning_rate = 0.01
 
@@ -106,6 +109,10 @@ def create_command_line_parser():
         Parser for command-line arguments.
     """
     parser = argparse.ArgumentParser(description=description)
+    parser.add_argument(
+        "-a", "--activation", type=str, default=default_activation,
+        help="Print debugging output (default: %(default)s)."
+    )
     parser.add_argument(
         "-d", "--debug", action="store_true", default=False,
         help="Print debugging output (default: %(default)s)."
@@ -233,13 +240,14 @@ def save_hyperparameters(args, output_dir="."):
     """
     path = os.path.join(output_dir, hyperparameter_file)
     with open(path, "w") as f:
-        f.write("learning_rate = %s\n" % repr(args.learning_rate))
-        f.write("max_epochs = %s\n" % repr(args.max_epochs))
         f.write("n_layers = %s\n" % repr(args.n_layers))
         f.write("H = %s\n" % repr(args.n_hid))
         f.write("w0_range = %s\n" % repr(w0_range))
         f.write("u0_range = %s\n" % repr(u0_range))
         f.write("v0_range = %s\n" % repr(v0_range))
+        f.write("activation = %s\n" % repr(args.activation))
+        f.write("learning_rate = %s\n" % repr(args.learning_rate))
+        f.write("max_epochs = %s\n" % repr(args.max_epochs))
         f.write("nx_train = %s\n" % repr(args.nx_train))
         f.write("nt_train = %s\n" % repr(args.nt_train))
         f.write("random_seed = %s\n" % repr(args.seed))
@@ -312,7 +320,7 @@ def create_training_data(nx, nt):
     return xt, xt_in, xt_bc
 
 
-def build_model(n_layers, H):
+def build_model(n_layers, H, activation="sigmoid"):
     """Build a multi-layer neural network model.
 
     Build a fully-connected, multi-layer neural network with single output.
@@ -324,6 +332,8 @@ def build_model(n_layers, H):
         Number of hidden layers to create.
     H : int
         Number of nodes to use in each hidden layer.
+    activation : str
+        Name of activation function to use.
 
     Returns
     -------
@@ -334,7 +344,7 @@ def build_model(n_layers, H):
     for i in range(n_layers):
         hidden_layer = tf.keras.layers.Dense(
             units=H, use_bias=True,
-            activation=tf.keras.activations.sigmoid,
+            activation=tf.keras.activations.deserialize(activation),
             kernel_initializer=tf.keras.initializers.RandomUniform(*w0_range),
             bias_initializer=tf.keras.initializers.RandomUniform(*u0_range)
         )
@@ -551,6 +561,7 @@ def main():
 
     # Parse the command-line arguments.
     args = parser.parse_args()
+    activation = args.activation
     debug = args.debug
     learning_rate = args.learning_rate
     max_epochs = args.max_epochs
@@ -616,13 +627,13 @@ def main():
     # Build the models.
     if verbose:
         print("Creating neural networks.")
-    model_rho = build_model(n_layers, H)
-    model_P   = build_model(n_layers, H)
-    model_vx  = build_model(n_layers, H)
-    model_vy  = build_model(n_layers, H)
-    model_vz  = build_model(n_layers, H)
-    model_By  = build_model(n_layers, H)
-    model_Bz  = build_model(n_layers, H)
+    model_rho = build_model(n_layers, H, activation)
+    model_P   = build_model(n_layers, H, activation)
+    model_vx  = build_model(n_layers, H, activation)
+    model_vy  = build_model(n_layers, H, activation)
+    model_vz  = build_model(n_layers, H, activation)
+    model_By  = build_model(n_layers, H, activation)
+    model_Bz  = build_model(n_layers, H, activation)
 
     # Create the optimizer.
     if verbose:
