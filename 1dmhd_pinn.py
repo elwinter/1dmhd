@@ -275,9 +275,9 @@ def create_training_data(nx, nt):
     # Initialize the mask to keep everything.
     mask = np.ones(len(xt), dtype=bool)
     # Mask off the points at x = 0.
-    mask[:nt] = False
+    # mask[:nt] = False
     # Mask off the points at x = 1.
-    mask[-nt:] = False
+    # mask[-nt:] = False
     # Mask off the points at t = 0.
     mask[::nt] = False
     # Keep t = t_max inside.
@@ -577,13 +577,13 @@ def main():
     if verbose:
         print("Computing boundary conditions.")
     bc = p.compute_boundary_conditions(xt_train_bc)
-    rho_bc0 = tf.Variable(bc[:, 0], dtype="float32")
-    P_bc0   = tf.Variable(bc[:, 1], dtype="float32")
-    vx_bc0  = tf.Variable(bc[:, 2], dtype="float32")
-    vy_bc0  = tf.Variable(bc[:, 3], dtype="float32")
-    vz_bc0  = tf.Variable(bc[:, 4], dtype="float32")
-    By_bc0  = tf.Variable(bc[:, 5], dtype="float32")
-    Bz_bc0  = tf.Variable(bc[:, 6], dtype="float32")
+    rho_bc0 = tf.Variable(bc[:, 0].reshape(n_train_bc, 1), dtype="float32")
+    P_bc0   = tf.Variable(bc[:, 1].reshape(n_train_bc, 1), dtype="float32")
+    vx_bc0  = tf.Variable(bc[:, 2].reshape(n_train_bc, 1), dtype="float32")
+    vy_bc0  = tf.Variable(bc[:, 3].reshape(n_train_bc, 1), dtype="float32")
+    vz_bc0  = tf.Variable(bc[:, 4].reshape(n_train_bc, 1), dtype="float32")
+    By_bc0  = tf.Variable(bc[:, 5].reshape(n_train_bc, 1), dtype="float32")
+    Bz_bc0  = tf.Variable(bc[:, 6].reshape(n_train_bc, 1), dtype="float32")
 
     # Compute the weight for the interior points.
     w_in = 1.0 - w_bc
