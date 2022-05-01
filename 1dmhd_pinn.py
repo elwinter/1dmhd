@@ -76,6 +76,9 @@ system_information_file = "system_information.txt"
 # Name of hyperparameter record file, as an importable Python module.
 hyperparameter_file = "hyperparameters.py"
 
+# Name of problem record file, as an importable Python module.
+problem_record_file = "problem.py"
+
 # Initial parameter ranges
 w0_range = [-0.1, 0.1]
 u0_range = [-0.1, 0.1]
@@ -241,6 +244,27 @@ def save_hyperparameters(args, output_dir="."):
         f.write("nt_train = %s\n" % repr(args.nt_train))
         f.write("random_seed = %s\n" % repr(args.seed))
         f.write("tol = %s\n" % repr(args.tolerance))
+
+
+def save_problem_definition(args, output_dir="."):
+    """Save the problem parameters for the run.
+    
+    Print a record of the problem description.
+
+    Parameters
+    ----------
+    args : dict
+        Dictionary of command-line arguments.
+    output_dir : str
+        Path to directory to contain the report.
+
+    Returns
+    -------
+    None
+    """
+    path = os.path.join(output_dir, problem_record_file)
+    with open(path, "w") as f:
+        f.write("problem_name = %s\n" % repr(args.problem))
 
 
 def create_training_data(nx, nt):
@@ -553,11 +577,12 @@ def main():
     output_dir = os.path.join(".", problem)
     create_output_directory(output_dir)
 
-    # Record system information and network parameters.
+    # Record system information, network parameters, and problem definition.
     if verbose:
-        print("Recording system information and model hyperparameters.")
+        print("Recording system information, model hyperparameters, and problem definition.")
     save_system_information(output_dir)
     save_hyperparameters(args, output_dir)
+    save_problem_definition(args, output_dir)
 
     # Create and save the training data.
     if verbose:
