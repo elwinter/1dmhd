@@ -61,11 +61,7 @@ def compute_boundary_conditions(xt_bc):
     bc = np.zeros((n, 7))  # 7 variables
     for i in range(n):
         xt = xt_bc[i]
-        if xt[0] == 0:
-            bc[i] = (rho_0, P_0, vx_0, vy_0, vz_0, By_0, Bz_0)
-        elif xt[0] == 1:
-            bc[i] = (rho_1, P_1, vx_1, vy_0, vz_1, By_1, Bz_1)
-        elif xt[1] == 0:
+        if xt[1] == 0:
             bc[i] = (rho_0, P_0, vx_0, vy_1, vz_0, By_0, Bz_0)
         else:
             raise ValueError
