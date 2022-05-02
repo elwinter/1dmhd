@@ -399,39 +399,41 @@ def build_model(n_layers, H, activation="sigmoid"):
 # @tf.function
 def pde_rho(xt, Y, del_Y):
     """Differential equation for rho."""
-    x = xt[:, 0]
-    t = xt[:, 1]
+    n = xt.shape[0]
+    x = tf.reshape(xt[:, 0], (n, 1))
+    t = tf.reshape(xt[:, 1], (n, 1))
     (rho, P, vx, vy, vz, By, Bz) = Y
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
-    drho_dx = del_rho[:, 0]
-    drho_dt = del_rho[:, 1]
-    dvx_dx  =  del_vx[:, 0]
+    drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
+    drho_dt = tf.reshape(del_rho[:, 1], (n, 1))
+    dvx_dx  = tf.reshape(del_vx[:, 0], (n, 1))
     G = drho_dt + rho*dvx_dx + drho_dx*vx
     return G
 
 # @tf.function
 def pde_P(xt, Y, del_Y):
     """Differential equation for P (actually E)."""
-    x = xt[:, 0]
-    t = xt[:, 1]
+    n = xt.shape[0]
+    x = tf.reshape(xt[:, 0], (n, 1))
+    t = tf.reshape(xt[:, 1], (n, 1))
     (rho, P, vx, vy, vz, By, Bz) = Y
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
     Bx = p.Bx_0
-    drho_dx  = del_rho[:, 0]
-    drho_dt  = del_rho[:, 1]
-    dvx_dx   =  del_vx[:, 0]
-    dvx_dt   =  del_vx[:, 1]
-    dvy_dx   =  del_vy[:, 0]
-    dvy_dt   =  del_vy[:, 1]
-    dvz_dx   =  del_vz[:, 0]
-    dvz_dt   =  del_vz[:, 1]
+    drho_dx  = tf.reshape(del_rho[:, 0], (n, 1))
+    drho_dt  = tf.reshape(del_rho[:, 1], (n, 1))
+    dvx_dx   =  tf.reshape(del_vx[:, 0], (n, 1))
+    dvx_dt   =  tf.reshape(del_vx[:, 1], (n, 1))
+    dvy_dx   =  tf.reshape(del_vy[:, 0], (n, 1))
+    dvy_dt   =  tf.reshape(del_vy[:, 1], (n, 1))
+    dvz_dx   =  tf.reshape(del_vz[:, 0], (n, 1))
+    dvz_dt   =  tf.reshape(del_vz[:, 1], (n, 1))
     dBx_dx   = 0
-    dBy_dx   =  del_By[:, 0]
-    dBy_dt   =  del_By[:, 1]
-    dBz_dx   =  del_Bz[:, 0]
-    dBz_dt   =  del_Bz[:, 1]
-    dP_dx    =   del_P[:, 0]
-    dP_dt    =   del_P[:, 1]
+    dBy_dx   =  tf.reshape(del_By[:, 0], (n, 1))
+    dBy_dt   =  tf.reshape(del_By[:, 1], (n, 1))
+    dBz_dx   =  tf.reshape(del_Bz[:, 0], (n, 1))
+    dBz_dt   =  tf.reshape(del_Bz[:, 1], (n, 1))
+    dP_dx    =   tf.reshape(del_P[:, 0], (n, 1))
+    dP_dt    =   tf.reshape(del_P[:, 1], (n, 1))
     Ptot = P + 0.5*(Bx**2 + By**2 + Bz**2)
     # dBx_dx and dBx_dt are 0.
     dPtot_dx = dP_dx + By*dBy_dx + Bz*dBz_dx
@@ -462,20 +464,21 @@ def pde_P(xt, Y, del_Y):
 # @tf.function
 def pde_vx(xt, Y, del_Y):
     """Differential equation for vx."""
-    x = xt[:, 0]
-    t = xt[:, 1]
+    n = xt.shape[0]
+    x = tf.reshape(xt[:, 0], (n, 1))
+    t = tf.reshape(xt[:, 1], (n, 1))
     (rho, P, vx, vy, vz, By, Bz) = Y
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
     Bx = p.Bx_0
-    drho_dx = del_rho[:, 0]
-    drho_dt = del_rho[:, 1]
-    dvx_dx  =  del_vx[:, 0]
-    dvx_dt  =  del_vx[:, 1]
+    drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
+    drho_dt = tf.reshape(del_rho[:, 1], (n, 1))
+    dvx_dx  =  tf.reshape(del_vx[:, 0], (n, 1))
+    dvx_dt  =  tf.reshape(del_vx[:, 1], (n, 1))
     dBx_dx  = 0.0
-    dBy_dx  =  del_By[:, 0]
-    dBz_dx  =  del_Bz[:, 0]
-    dP_dx   =   del_P[:, 0]
-    dPtot_dx = dP_dx + By*dBy_dx + Bz*dBz_dx
+    dBy_dx  =  tf.reshape(del_By[:, 0], (n, 1))
+    dBz_dx  =  tf.reshape(del_Bz[:, 0], (n, 1))
+    dP_dx   =   tf.reshape(del_P[:, 0], (n, 1))
+    dPtot_dx = dP_dx + Bx*dBx_dx + By*dBy_dx + Bz*dBz_dx
     G = (
         rho*dvx_dt + drho_dt*vx
         + rho*2*vx*dvx_dx + drho_dx*vx**2 + dPtot_dx - 2*Bx*dBx_dx
@@ -485,18 +488,19 @@ def pde_vx(xt, Y, del_Y):
 # @tf.function
 def pde_vy(xt, Y, del_Y):
     """Differential equation for vy."""
-    x = xt[:, 0]
-    t = xt[:, 1]
+    n = xt.shape[0]
+    x = tf.reshape(xt[:, 0], (n, 1))
+    t = tf.reshape(xt[:, 1], (n, 1))
     (rho, P, vx, vy, vz, By, Bz) = Y
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
     Bx = p.Bx_0
-    drho_dx = del_rho[:, 0]
-    drho_dt = del_rho[:, 1]
-    dvx_dx  =  del_vx[:, 0]
-    dvy_dx  =  del_vy[:, 0]
-    dvy_dt  =  del_vy[:, 1]
+    drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
+    drho_dt = tf.reshape(del_rho[:, 1], (n, 1))
+    dvx_dx  =  tf.reshape(del_vx[:, 0], (n, 1))
+    dvy_dx  =  tf.reshape(del_vy[:, 0], (n, 1))
+    dvy_dt  =  tf.reshape(del_vy[:, 1], (n, 1))
     dBx_dx  = 0.0
-    dBy_dx  =  del_By[:, 0]
+    dBy_dx  =  tf.reshape(del_By[:, 0], (n, 1))
     G = (
         rho*dvy_dt + drho_dt*vy
         + rho*(vx*dvy_dx + dvx_dx*vy) + drho_dx*vx*vy
@@ -507,18 +511,19 @@ def pde_vy(xt, Y, del_Y):
 # @tf.function
 def pde_vz(xt, Y, del_Y):
     """Differential equation for vz."""
-    x = xt[:, 0]
-    t = xt[:, 1]
+    n = xt.shape[0]
+    x = tf.reshape(xt[:, 0], (n, 1))
+    t = tf.reshape(xt[:, 1], (n, 1))
     (rho, P, vx, vy, vz, By, Bz) = Y
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
     Bx = p.Bx_0
-    drho_dx = del_rho[:, 0]
-    drho_dt = del_rho[:, 1]
-    dvx_dx  =  del_vx[:, 0]
-    dvz_dx  =  del_vz[:, 0]
-    dvz_dt  =  del_vz[:, 1]
+    drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
+    drho_dt = tf.reshape(del_rho[:, 1], (n, 1))
+    dvx_dx  =  tf.reshape(del_vx[:, 0], (n, 1))
+    dvz_dx  =  tf.reshape(del_vz[:, 0], (n, 1))
+    dvz_dt  =  tf.reshape(del_vz[:, 1], (n, 1))
     dBx_dx  = 0.0
-    dBz_dx  =  del_Bz[:, 0]
+    dBz_dx  =  tf.reshape(del_Bz[:, 0], (n, 1))
     G = (
         rho*dvz_dt + drho_dt*vz
         + rho*(vx*dvz_dx + dvx_dx*vz) + drho_dx*vx*vz
@@ -529,32 +534,34 @@ def pde_vz(xt, Y, del_Y):
 # @tf.function
 def pde_By(xt, Y, del_Y):
     """Differential equation for By."""
-    x = xt[:, 0]
-    t = xt[:, 1]
+    n = xt.shape[0]
+    x = tf.reshape(xt[:, 0], (n, 1))
+    t = tf.reshape(xt[:, 1], (n, 1))
     (rho, P, vx, vy, vz, By, Bz) = Y
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
     Bx = p.Bx_0
-    dvx_dx = del_vx[:, 0]
-    dvy_dx = del_vy[:, 0]
+    dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
+    dvy_dx = tf.reshape(del_vy[:, 0], (n, 1))
     dBx_dx = 0
-    dBy_dx = del_By[:, 0]
-    dBy_dt = del_By[:, 1]
+    dBy_dx = tf.reshape(del_By[:, 0], (n, 1))
+    dBy_dt = tf.reshape(del_By[:, 1], (n, 1))
     G = dBy_dt + By*dvx_dx + dBy_dx*vx - Bx*dvy_dx - dBx_dx*vy
     return G
 
 # @tf.function
 def pde_Bz(xt, Y, del_Y):
     """Differential equation for Bz."""
-    x = xt[:, 0]
-    t = xt[:, 1]
+    n = xt.shape[0]
+    x = tf.reshape(xt[:, 0], (n, 1))
+    t = tf.reshape(xt[:, 1], (n, 1))
     (rho, P, vx, vy, vz, By, Bz) = Y
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
     Bx = p.Bx_0
-    dvx_dx  = del_vx[:, 0]
-    dvz_dx  = del_vz[:, 0]
+    dvx_dx  = tf.reshape(del_vx[:, 0], (n, 1))
+    dvz_dx  = tf.reshape(del_vz[:, 0], (n, 1))
     dBx_dx = 0
-    dBz_dx  = del_Bz[:, 0]
-    dBz_dt  = del_Bz[:, 1]
+    dBz_dx  = tf.reshape(del_Bz[:, 0], (n, 1))
+    dBz_dt  = tf.reshape(del_Bz[:, 1], (n, 1))
     G = dBz_dt + Bz*dvx_dx + dBz_dx*vx - Bx*dvz_dx - dBx_dx*vz
     return G
 
@@ -714,7 +721,7 @@ def main():
             del_Y_in = [del_rho_in, del_P_in, del_vx_in, del_vy_in, del_vz_in, del_By_in, del_Bz_in]
             G_rho_in = pde_rho(xt_in, Y_in, del_Y_in)
             G_P_in   =   pde_P(xt_in, Y_in, del_Y_in)
-            G_vx_in  = pde_vx( xt_in, Y_in, del_Y_in)
+            G_vx_in  =  pde_vx(xt_in, Y_in, del_Y_in)
             G_vy_in  =  pde_vy(xt_in, Y_in, del_Y_in)
             G_vz_in  =  pde_vz(xt_in, Y_in, del_Y_in)
             G_By_in  =  pde_By(xt_in, Y_in, del_Y_in)
