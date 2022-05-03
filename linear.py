@@ -15,16 +15,13 @@ Eric Winter (eric.winter62@gmail.com)
 """
 
 import numpy as np
-import tensorflow as tf
 
 
 # Define the initial condition.
 ic = 0.0
 
 
-# Define the differential equation.
-
-def de(X, Y, delY):
+def differential_equation(X, Y, delY):
     """Linear first-order ODE.
 
     Simple linear ODE. Analytical solution is y(x) = x.

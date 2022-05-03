@@ -433,7 +433,7 @@ def main():
             # Compute the estimate of the differential equation at the interior training points.
             Y_in = [y_in]
             del_Y_in = [del_y_in]
-            G_y_in = p.de(x_in, Y_in, del_Y_in)
+            G_y_in = p.differential_equation(x_in, Y_in, del_Y_in)
 
             # Compute the errors in the computed initial condition.
             E_y_bc = y_bc - p.ic
