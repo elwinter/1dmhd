@@ -3,7 +3,7 @@
 This problem definition file describes:
 
     dy/dx + sin(x) = 0
-    y(0) = 0
+    y(0) = 1
     y(x) = cos(x)
 
 The functions in this module are defined using a combination of Numpy and
