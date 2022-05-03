@@ -2,7 +2,7 @@
 
 This problem definition file describes:
 
-    dy/dx = 1
+    dy/dx - 1 = 0
     y(0) = 0
     y(x) = x
 
@@ -22,14 +22,38 @@ import tensorflow as tf
 ic = 0.0
 
 
-# Define the ODE.
+# Define the differential equation.
 
-def ode(X, Y, delY):
-    n = X.shape[0]
-    x = tf.reshape(X[:, 0], (n, 1))
-    y = Y
-    (del_y,) = delY
-    dy_dx = tf.reshape(del_y[:, 0], (n, 1))
+def de(X, Y, delY):
+    """Linear first-order ODE.
+
+    Simple linear ODE. Analytical solution is y(x) = x.
+
+    n is the number of evaluation points for the equation,
+    equal to the length of X.
+
+    m is the number of independent variables (1 for ODE).
+
+    neq is the number of equations being solved (1 for ODE), and is
+    assumed to be the same as the number of dependent variables.
+
+    Parameters
+    ----------
+    X : tf.Variable, each shape (n, m)
+        Independent variable values for computation of ODE.
+    Y : List of neq tf.Tensor, each shape(n, 1)
+        Dependent variable values at each x-value.
+    delY : List of neq tf.Tensor, each shape(n, m)
+        Gradient values at each x-value.
+
+    Returns
+    -------
+    G : tf.Tensor, shape (n, neq)
+        Value of equations at each x-value.
+    """
+    x = X
+    y = Y[0]
+    dy_dx = delY[0]
     G = dy_dx - 1
     return G
 
