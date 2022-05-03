@@ -132,4 +132,5 @@ dmypy.json
 # .vscode/
 
 # Test outputs
+linear/
 static/
