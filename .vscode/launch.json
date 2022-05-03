@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--debug", "--verbose", "--max_epochs=1000", "--noconvcheck", "--w_bc", "0.1", "--activation", "sigmoid", "--problem", "alfven_wave", "--nx_train", "11", "--nt_train", "11"]
+            "args": ["--debug", "--verbose", "--noconvcheck", "--max_epochs", "1000", "--w_bc", "0.5"]
         }
     ]
 }
