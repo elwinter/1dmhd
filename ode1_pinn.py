@@ -56,6 +56,9 @@ default_n_layers = 1
 # Default number of training points in the x-dimension.
 default_nx_train = 11
 
+# Default TF precision for computations.
+default_precision = "float32"
+
 # Default problem name.
 default_problem = "linear"
 
@@ -136,6 +139,10 @@ def create_command_line_parser():
     parser.add_argument(
         "--nx_train", type=int, default=default_nx_train,
         help="Number of equally-spaced training points in x dimension (default: %(default)s)"
+    )
+    parser.add_argument(
+        "--precision", type=str, default=default_precision,
+        help="Precision to use in TensorFlow solution (default: %(default)s)"
     )
     parser.add_argument(
         "--problem", type=str, default=default_problem,
@@ -331,6 +338,9 @@ def main():
     if debug:
         print("args = %s" % args)
 
+    # Set the backend TensorFlow precision.
+    tf.keras.backend.set_floatx(args.precision)
+
     # Import the problem to solve.
     global p
     if verbose:
@@ -365,7 +375,7 @@ def main():
     # Compute the initial condition value.
     if verbose:
         print("Computing boundary conditions.")
-    ic = tf.Variable([[p.ic]], dtype="float32")
+    ic = tf.Variable([[p.ic]], dtype=args.precision)
 
     # Compute the weight for the interior points.
     w_in = 1.0 - w_bc
@@ -390,11 +400,11 @@ def main():
     tf.random.set_seed(seed)
 
     # Rename the training data Variables for convenience.
-    x_train_var = tf.Variable(x_train.reshape(n_train, 1), dtype="float32")
+    x_train_var = tf.Variable(x_train.reshape(n_train, 1), dtype=args.precision)
     x = x_train_var
-    x_train_in_var = tf.Variable(x_train_in.reshape(n_train_in, 1), dtype="float32")
+    x_train_in_var = tf.Variable(x_train_in.reshape(n_train_in, 1), dtype=args.precision)
     x_in = x_train_in_var
-    x_train_bc_var = tf.Variable(x_train_bc.reshape(n_train_bc, 1), dtype="float32")
+    x_train_bc_var = tf.Variable(x_train_bc.reshape(n_train_bc, 1), dtype=args.precision)
     x_bc = x_train_bc_var
 
     # Clear the convergence flag to start.
