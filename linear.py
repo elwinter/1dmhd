@@ -55,6 +55,34 @@ def differential_equation(X, Y, delY):
     return G
 
 
+def analytical_solution(X):
+    """Analytical solution to ODE.
+
+    Analytical solution to linear ODE.
+
+    n is the number of evaluation points for the equation,
+    equal to the length of X.
+
+    m is the number of independent variables (1 for ODE).
+
+    neq is the number of equations being solved (1 for ODE), and is
+    assumed to be the same as the number of dependent variables.
+
+    Parameters
+    ----------
+    X : tf.Variable, each shape (n, m)
+        Independent variable values for computation of solution.
+
+    Returns
+    -------
+    Y : tf.Tensor, shape (n, neq)
+        Value of equations at each x-value.
+    """
+    x = X
+    Y = x
+    return Y
+
+
 def create_training_data(nx):
     """Create the training data.
 
