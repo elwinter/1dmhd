@@ -250,6 +250,7 @@ def save_hyperparameters(args, output_dir="."):
         f.write("nx_train = %s\n" % repr(args.nx_train))
         f.write("random_seed = %s\n" % repr(args.seed))
         f.write("tol = %s\n" % repr(args.tolerance))
+        f.write("precision = %s\n" % repr(args.precision))
 
 
 def save_problem_definition(args, output_dir="."):
@@ -434,7 +435,7 @@ def main():
             del_Y_in = [del_y_in]
             G_y_in = p.de(x_in, Y_in, del_Y_in)
 
-            # Compute the errors in the computed BC.
+            # Compute the errors in the computed initial condition.
             E_y_bc = y_bc - p.ic
 
             # Compute the loss functions for the interior training points.
