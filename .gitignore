@@ -133,6 +133,7 @@ dmypy.json
 
 # Test outputs
 alfven_wave/
+cubic/
 linear/
 quadratic/
 static/
