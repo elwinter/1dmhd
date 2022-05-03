@@ -135,6 +135,7 @@ dmypy.json
 alfven_wave/
 cosine/
 cubic/
+exponential/
 linear/
 quadratic/
 sine/
