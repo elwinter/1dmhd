@@ -23,6 +23,8 @@ import argparse
 import datetime
 from importlib import import_module
 import os
+import platform
+import sys
 
 # Import 3rd-party modules.
 import numpy as np
@@ -66,6 +68,15 @@ default_tolerance = 1e-6
 
 # Default normalized weight to apply to the boundary condition loss.
 default_w_bc = 0.0
+
+# Name of system information file.
+system_information_file = "system_information.txt"
+
+# Name of hyperparameter record file, as an importable Python module.
+hyperparameter_file = "hyperparameters.py"
+
+# Name of problem record file, as an importable Python module.
+problem_record_file = "problem.py"
 
 # Initial parameter ranges
 w0_range = [-0.1, 0.1]
@@ -174,6 +185,87 @@ def create_output_directory(path="."):
         pass
 
 
+def save_system_information(output_dir="."):
+    """Save a summary of system characteristics.
+    
+    Save a summary of the host system in the specified directory.
+
+    Parameters
+    ----------
+    output_dir : str
+        Path to directory to contain the report.
+    
+    Returns
+    -------
+    None
+    """
+    path = os.path.join(output_dir, system_information_file)
+    with open(path, "w") as f:
+        f.write("System report:\n")
+        f.write("Start time: %s\n" % datetime.datetime.now())
+        f.write("Host name: %s\n" % platform.node())
+        f.write("Platform: %s\n" % platform.platform())
+        f.write("uname: " + " ".join(platform.uname()) + "\n")
+        f.write("Python version: %s\n" % sys.version)
+        f.write("Python build: %s\n" % " ".join(platform.python_build()))
+        f.write("Python compiler: %s\n" % platform.python_compiler())
+        f.write("Python implementation: %s\n" % platform.python_implementation())
+        f.write("Python file: %s\n" % __file__)
+
+
+def save_hyperparameters(args, output_dir="."):
+    """Save the neural network hyperparameters.
+    
+    Print a record of the hyperparameters of the neural networks in the
+    specified directory.
+
+    Parameters
+    ----------
+    args : dict
+        Dictionary of command-line arguments.
+    output_dir : str
+        Path to directory to contain the report.
+
+    Returns
+    -------
+    None
+    """
+    path = os.path.join(output_dir, hyperparameter_file)
+    with open(path, "w") as f:
+        f.write("n_layers = %s\n" % repr(args.n_layers))
+        f.write("H = %s\n" % repr(args.n_hid))
+        f.write("w0_range = %s\n" % repr(w0_range))
+        f.write("u0_range = %s\n" % repr(u0_range))
+        f.write("v0_range = %s\n" % repr(v0_range))
+        f.write("activation = %s\n" % repr(args.activation))
+        f.write("learning_rate = %s\n" % repr(args.learning_rate))
+        f.write("max_epochs = %s\n" % repr(args.max_epochs))
+        f.write("nx_train = %s\n" % repr(args.nx_train))
+        f.write("random_seed = %s\n" % repr(args.seed))
+        f.write("tol = %s\n" % repr(args.tolerance))
+
+
+def save_problem_definition(args, output_dir="."):
+    """Save the problem parameters for the run.
+    
+    Print a record of the problem description.
+
+    Parameters
+    ----------
+    args : dict
+        Dictionary of command-line arguments.
+    output_dir : str
+        Path to directory to contain the report.
+
+    Returns
+    -------
+    None
+    """
+    path = os.path.join(output_dir, problem_record_file)
+    with open(path, "w") as f:
+        f.write("problem_name = %s\n" % repr(args.problem))
+
+
 def build_model(n_layers, H, activation="sigmoid"):
     """Build a multi-layer neural network model.
 
@@ -251,6 +343,13 @@ def main():
     output_dir = os.path.join(".", problem)
     create_output_directory(output_dir)
 
+    # Record system information, network parameters, and problem definition.
+    if verbose:
+        print("Recording system information, model hyperparameters, and problem definition.")
+    save_system_information(output_dir)
+    save_hyperparameters(args, output_dir)
+    save_problem_definition(args, output_dir)
+
     # Create and save the training data.
     if verbose:
         print("Creating and saving training data.")
@@ -323,7 +422,7 @@ def main():
             # Compute the estimate of the differential equation at the interior training points.
             Y_in = [y_in]
             del_Y_in = [del_y_in]
-            G_y_in = p.ode(x_in, Y_in, del_Y_in)
+            G_y_in = p.de(x_in, Y_in, del_Y_in)
 
             # Compute the errors in the computed BC.
             E_y_bc = y_bc - p.ic
