@@ -56,6 +56,9 @@ default_n_layers = 1
 # Default number of training points in the x-dimension.
 default_nx_train = 11
 
+# Default number of validation points in the x-dimension.
+default_nx_val = 101
+
 # Default TF precision for computations.
 default_precision = "float32"
 
@@ -139,6 +142,10 @@ def create_command_line_parser():
     parser.add_argument(
         "--nx_train", type=int, default=default_nx_train,
         help="Number of equally-spaced training points in x dimension (default: %(default)s)"
+    )
+    parser.add_argument(
+        "--nx_val", type=int, default=default_nx_val,
+        help="Number of equally-spaced validation points in x dimension (default: %(default)s)"
     )
     parser.add_argument(
         "--precision", type=str, default=default_precision,
@@ -331,6 +338,7 @@ def main():
     n_layers = args.n_layers
     # nt_train = args.nt_train
     nx_train = args.nx_train
+    nx_val = args.nx_val
     problem = args.problem
     seed = args.seed
     tol = args.tolerance
@@ -496,6 +504,21 @@ def main():
         y_train = model(x)
     np.savetxt(os.path.join(output_dir, "y_train.dat"), y_train.numpy().reshape((n_train,)))
 
+    # Compute and save the trained results at validation points.
+    if verbose:
+        print("Computing and saving validation results.")
+    x_val, x_val_in, x_val_bc = p.create_training_data(nx_val)
+    n_val = len(x_val)
+    n_val_in = len(x_val_in)
+    n_val_bc = len(x_val_bc)
+    np.savetxt(os.path.join(output_dir, "x_val.dat"), x_val)
+    np.savetxt(os.path.join(output_dir, "x_val_in.dat"), x_val_in)
+    np.savetxt(os.path.join(output_dir, "x_val_bc.dat"), x_val_bc)
+    x_val = tf.Variable(x_val.reshape(n_val, 1), dtype=args.precision)
+    with tf.GradientTape(persistent=True) as tape:
+        y_val = model(x_val)
+    np.savetxt(os.path.join(output_dir, "y_val.dat"), y_val.numpy().reshape((n_val,)))
+    # x_train_var = tf.Variable(x_train.reshape(n_train, 1), dtype=args.precision)
 
 if __name__ == "__main__":
     """Begin main program."""
