@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--debug", "--verbose", "--noconvcheck", "--n_layers", "6", "--n_hid", "10", "--nx_train", "11", "--max_epochs", "1000", "--w_bc", "0.1", "--problem", "linear"]
+            "args": ["--debug", "--verbose", "--noconvcheck", "--n_layers", "1", "--n_hid", "10", "--nx_train", "11", "--max_epochs", "1000", "--w_bc", "0.1", "--problem", "linear"]
         }
     ]
 }
