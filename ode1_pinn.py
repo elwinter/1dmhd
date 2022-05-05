@@ -511,6 +511,7 @@ def main():
     n_val = len(x_val)
     n_val_in = len(x_val_in)
     n_val_bc = len(x_val_bc)
+    assert n_val_in + n_val_bc == n_val
     np.savetxt(os.path.join(output_dir, "x_val.dat"), x_val)
     np.savetxt(os.path.join(output_dir, "x_val_in.dat"), x_val_in)
     np.savetxt(os.path.join(output_dir, "x_val_bc.dat"), x_val_bc)
@@ -518,7 +519,6 @@ def main():
     with tf.GradientTape(persistent=True) as tape:
         y_val = model(x_val)
     np.savetxt(os.path.join(output_dir, "y_val.dat"), y_val.numpy().reshape((n_val,)))
-    # x_train_var = tf.Variable(x_train.reshape(n_train, 1), dtype=args.precision)
 
 if __name__ == "__main__":
     """Begin main program."""
