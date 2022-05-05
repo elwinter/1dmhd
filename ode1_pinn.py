@@ -520,6 +520,7 @@ def main():
         y_val = model(x_val)
     np.savetxt(os.path.join(output_dir, "y_val.dat"), y_val.numpy().reshape((n_val,)))
 
+
 if __name__ == "__main__":
     """Begin main program."""
     main()
