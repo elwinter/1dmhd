@@ -455,6 +455,9 @@ def main():
         # Save the current losses.
         losses.append(L.numpy())
 
+        # Save the current model weights.
+        model.save_weights(os.path.join(output_dir, "weights", "weights_%06d" % epoch))
+
         # Check for convergence.
         if not noconvcheck:
             if epoch > 1:
@@ -511,6 +514,9 @@ def main():
     # with tf.GradientTape(persistent=True) as tape:
     y_val = model(x_val)
     np.savetxt(os.path.join(output_dir, "y_val.dat"), y_val.numpy().reshape((n_val,)))
+
+    # Save the trained model.
+    model.save(os.path.join(output_dir, "model"))
 
 
 if __name__ == "__main__":
