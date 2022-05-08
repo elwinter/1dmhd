@@ -111,6 +111,10 @@ def create_command_line_parser():
         help="Print debugging output (default: %(default)s)."
     )
     parser.add_argument(
+        "--convcheck", action="store_true",
+        help="Perform convergence check (default: %(default)s)."
+    )
+    parser.add_argument(
         "-d", "--debug", action="store_true", default=False,
         help="Print debugging output (default: %(default)s)."
     )
@@ -123,8 +127,16 @@ def create_command_line_parser():
         help="Maximum number of training epochs (default: %(default)s)"
     )
     parser.add_argument(
-        "--noconvcheck", action="store_true", default=False,
+        "--no-convcheck", dest="convcheck", action="store_false",
         help="Do not perform convergence check (default: %(default)s)."
+    )
+    parser.add_argument(
+        "--no-save_model", dest="save_model", action="store_false",
+        help="Do not save the trained model (default: %(default)s)."
+    )
+    parser.add_argument(
+        "--no-save_weights", dest="save_weights", action="store_false",
+        help="Do not save the model weights at each epoch (default: %(default)s)."
     )
     parser.add_argument(
         "--n_hid", type=int, default=default_H,
@@ -151,6 +163,14 @@ def create_command_line_parser():
         help="Name of problem to solve (default: %(default)s)"
     )
     parser.add_argument(
+        "--save_model", action="store_true",
+        help="Save the trained model (default: %(default)s)."
+    )
+    parser.add_argument(
+        "--save_weights", action="store_true",
+        help="Save the model weights at each epoch (default: %(default)s)."
+    )
+    parser.add_argument(
         "--seed", type=int, default=default_seed,
         help="Seed for random number generator (default: %(default)s)"
     )
@@ -166,6 +186,9 @@ def create_command_line_parser():
         "-w", "--w_bc", type=float, default=default_w_bc,
         help="Weight for boundary loss (default: %(default)s)."
     )
+    parser.set_defaults(convcheck=True)
+    parser.set_defaults(save_model=True)
+    parser.set_defaults(save_weights=False)
     return parser
 
 
@@ -325,16 +348,18 @@ def main():
     # Parse the command-line arguments.
     args = parser.parse_args()
     activation = args.activation
+    convcheck = args.convcheck
     debug = args.debug
     learning_rate = args.learning_rate
     max_epochs = args.max_epochs
     H = args.n_hid
-    noconvcheck = args.noconvcheck
     n_layers = args.n_layers
     # nt_train = args.nt_train
     nx_train = args.nx_train
     nx_val = args.nx_val
     problem = args.problem
+    save_model = args.save_model
+    save_weights = args.save_weights
     seed = args.seed
     tol = args.tolerance
     verbose = args.verbose
@@ -456,10 +481,11 @@ def main():
         losses.append(L.numpy())
 
         # Save the current model weights.
-        model.save_weights(os.path.join(output_dir, "weights", "weights_%06d" % epoch))
+        if save_weights:
+            model.save_weights(os.path.join(output_dir, "weights", "weights_%06d" % epoch))
 
         # Check for convergence.
-        if not noconvcheck:
+        if convcheck:
             if epoch > 1:
                 loss_delta = losses[-1] - losses[-2]
                 if abs(loss_delta) <= tol:
@@ -516,7 +542,8 @@ def main():
     np.savetxt(os.path.join(output_dir, "y_val.dat"), y_val.numpy().reshape((n_val,)))
 
     # Save the trained model.
-    model.save(os.path.join(output_dir, "model"))
+    if save_model:
+        model.save(os.path.join(output_dir, "model"))
 
 
 if __name__ == "__main__":
