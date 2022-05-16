@@ -477,8 +477,8 @@ def main():
 
             # Compute the second derivatives at the interior training points.
             del2Y_jac_in = tape2.jacobian(delY_in, xy_in)
-            d2Y_dx2_in = tf.linalg.tensor_diag_part(del2Y_jac_in[:, 0, :, 0])
-            d2Y_dy2_in = tf.linalg.tensor_diag_part(del2Y_jac_in[:, 1, :, 1])
+            d2Y_dx2_in = tf.reshape(tf.linalg.tensor_diag_part(del2Y_jac_in[:, 0, :, 0]), (n_train_in, 1))
+            d2Y_dy2_in = tf.reshape(tf.linalg.tensor_diag_part(del2Y_jac_in[:, 1, :, 1]), (n_train_in, 1))
             del2Y_in = [d2Y_dx2_in, d2Y_dy2_in]
 
             # Compute the estimate of the differential equation at the interior training points.
