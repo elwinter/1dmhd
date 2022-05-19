@@ -29,18 +29,30 @@ def differential_equation(xt, Y, delY):
     return G
 
 
-# x_center = 0.2
+def compute_boundary_conditions(xt):
+    n = len(xt)
+    bc = np.empty(n)
+    for (i, (x, t)) in enumerate(xt):
+        if np.isclose(t, t0):
+            Y = x*np.exp(-x**2)
+        else:
+            raise Exception
+        bc[i] = Y
+    return bc
 
-# def f0(x):
-#     dx = x - x_center
-#     Y = np.exp(dx**2)
-#     return Y
 
-# def analytical_solution(xt):
-#     n = xt.shape[0]
-#     x = tf.reshape(xt[:, 0], (n, 1))
-#     t = tf.reshape(xt[:, 1], (n, 1))
-#     return (x + y**3)*tf.math.exp(-x)
+x_center = 0.2
+
+def f0(x):
+    dx = x - x_center
+    Y = tf.math.exp(dx**2)
+    return Y
+
+def analytical_solution(xt):
+    n = xt.shape[0]
+    x = tf.reshape(xt[:, 0], (n, 1))
+    t = tf.reshape(xt[:, 1], (n, 1))
+    return f0(x - v*t)
 
 
 def create_training_data(nx, nt):
@@ -61,15 +73,3 @@ def create_training_data(nx, nt):
     mask = np.logical_not(mask)
     xt_bc = xt[mask]
     return xt, xt_in, xt_bc
-
-
-def compute_boundary_conditions(xt):
-    n = len(xt)
-    bc = np.empty(n)
-    for (i, (x, t)) in enumerate(xt):
-        if np.isclose(t, t0):
-            Y = x*np.exp(-x**2)
-        else:
-            raise Exception
-        bc[i] = Y
-    return bc
