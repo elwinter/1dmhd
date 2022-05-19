@@ -219,11 +219,6 @@ def create_output_directory(path="."):
     Returns
     -------
     None
-
-    Raises
-    ------
-    Exception
-        If the directory exists.
     """
     try:
         os.mkdir(path)
@@ -372,9 +367,10 @@ def main():
     H = args.n_hid
     n_layers = args.n_layers
     nx_train = args.nx_train
-    ny_train = args.ny_train
     nx_val = args.nx_val
+    ny_train = args.ny_train
     ny_val = args.ny_val
+    precision = args.precision
     problem = args.problem
     save_model = args.save_model
     save_weights = args.save_weights
@@ -386,7 +382,7 @@ def main():
         print("args = %s" % args)
 
     # Set the backend TensorFlow precision.
-    tf.keras.backend.set_floatx(args.precision)
+    tf.keras.backend.set_floatx(precision)
 
     # Import the problem to solve.
     global p
@@ -422,7 +418,9 @@ def main():
     # Compute the boundary condition values.
     if verbose:
         print("Computing boundary conditions.")
-    bc = tf.Variable(p.compute_boundary_conditions(xy_train_bc), dtype=args.precision)
+    bc = p.compute_boundary_conditions(xy_train_bc)
+    bc = bc.reshape((n_train_bc, 1))
+    bc = tf.Variable(bc, dtype=precision)
 
     # Compute the weight for the interior points.
     w_in = 1.0 - w_bc
@@ -437,7 +435,7 @@ def main():
         print("Creating optimizer.")
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
-    # Train the models.
+    # Train the model.
 
     # Create history variables.
     losses = []
@@ -446,11 +444,11 @@ def main():
     tf.random.set_seed(seed)
 
     # Rename the training data Variables for convenience.
-    xy_train_var = tf.Variable(xy_train.reshape(n_train, 2), dtype=args.precision)
+    xy_train_var = tf.Variable(xy_train, dtype=precision)
     xy = xy_train_var
-    xy_train_in_var = tf.Variable(xy_train_in.reshape(n_train_in, 2), dtype=args.precision)
+    xy_train_in_var = tf.Variable(xy_train_in, dtype=precision)
     xy_in = xy_train_in_var
-    xy_train_bc_var = tf.Variable(xy_train_bc.reshape(n_train_bc, 2), dtype=args.precision)
+    xy_train_bc_var = tf.Variable(xy_train_bc, dtype=precision)
     xy_bc = xy_train_bc_var
 
     # Clear the convergence flag to start.
@@ -472,9 +470,9 @@ def main():
                 # Compute the network outputs on the boundaries.
                 Y_bc = model(xy_bc)
 
-                # Compute the first derivatives at the interior training
-                # points.
-                delY_in = tape1.gradient(Y_in, xy_in)
+            # Compute the first derivatives at the interior training
+            # points.
+            delY_in = tape1.gradient(Y_in, xy_in)
 
             # Compute the estimate of the differential equation at the interior
             # training points.
@@ -551,7 +549,7 @@ def main():
     np.savetxt(os.path.join(output_dir, "xy_val.dat"), xy_val)
     np.savetxt(os.path.join(output_dir, "xy_val_in.dat"), xy_val_in)
     np.savetxt(os.path.join(output_dir, "xy_val_bc.dat"), xy_val_bc)
-    xy_val = tf.Variable(xy_val.reshape(n_val, 2), dtype=args.precision)
+    xy_val = tf.Variable(xy_val.reshape(n_val, 2), dtype=precision)
     # with tf.GradientTape(persistent=True) as tape:
     Y_val = model(xy_val)
     np.savetxt(os.path.join(output_dir, "Y_val.dat"), Y_val.numpy().reshape((n_val,)))
