@@ -420,7 +420,9 @@ def main():
     # Compute the boundary condition values.
     if verbose:
         print("Computing boundary conditions.")
-    bc = tf.Variable(p.compute_boundary_conditions(xy_train_bc), dtype=args.precision)
+    bc = p.compute_boundary_conditions(xy_train_bc)
+    bc = bc.reshape((n_train_bc, 1))
+    bc = tf.Variable(bc, dtype=args.precision)
 
     # Compute the weight for the interior points.
     w_in = 1.0 - w_bc
