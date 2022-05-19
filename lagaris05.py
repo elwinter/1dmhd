@@ -1,6 +1,5 @@
 """Problem definition file for Lagaris problem 5."""
 
-from distutils import bcppcompiler
 import numpy as np
 import tensorflow as tf
 
@@ -19,6 +18,24 @@ def differential_equation(xy, Y, delY, del2Y):
     (d2Y_dx2, d2Y_dy2) = del2Y
     G = d2Y_dx2 + d2Y_dy2 - (x - 2 + y**3 + 6*y)*tf.math.exp(-x)
     return G
+
+
+def compute_boundary_conditions(xy):
+    nxy = len(xy)
+    bc = np.empty(nxy)
+    for (i, (x, y)) in enumerate(xy):
+        if np.isclose(x, x0):
+            z = y**3
+        elif np.isclose(x, x1):
+            z = (1 + y**3)/np.e
+        elif np.isclose(y, y0):
+            z = x*np.exp(-x)
+        elif np.isclose(y, y1):
+            z = (x + 1)*np.exp(-x)
+        else:
+            raise Exception
+        bc[i] = z
+    return bc
 
 
 def analytical_solution(xy):
@@ -51,21 +68,3 @@ def create_training_data(nx, ny):
     mask = np.logical_not(mask)
     xy_bc = xy[mask]
     return xy, xy_in, xy_bc
-
-
-def compute_boundary_conditions(xy):
-    nxy = len(xy)
-    bc = np.empty(nxy)
-    for (i, (x, y)) in enumerate(xy):
-        if np.isclose(x, x0):
-            z = y**3
-        elif np.isclose(x, x1):
-            z = (1 + y)**3/np.e
-        elif np.isclose(y, y0):
-            z = x*np.exp(-x)
-        elif np.isclose(y, y1):
-            z = (x + 1)*np.exp(-x)
-        else:
-            raise Exception
-        bc[i] = z
-    return bc
