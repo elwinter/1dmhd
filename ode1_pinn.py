@@ -438,8 +438,10 @@ def main():
 
     # Train the model.
 
-    # Create the loss function history.
+    # Create the loss function histories.
     losses = []
+    losses_in = []
+    losses_bc = []
 
     # Set the random number seed for reproducibility.
     tf.random.set_seed(seed)
@@ -501,8 +503,10 @@ def main():
             # Shape is () (scalar).
             L = w_in*L_in + w_bc*L_bc
 
-        # Save the current total loss.
+        # Save the current losses.
         losses.append(L.numpy())
+        losses_in.append(L_in.numpy())
+        losses_bc.append(L_bc.numpy())
 
         # Save the current model weights.
         if save_weights:
@@ -554,10 +558,12 @@ def main():
         print("Final value of loss function: %f" % losses[-1])
         print("converged = %s" % converged)
 
-    # Save the loss function history.
+    # Save the loss function histories.
     if verbose:
-        print("Saving loss function history.")
+        print("Saving loss function histories.")
     np.savetxt(os.path.join(output_dir, 'losses.dat'), np.array(losses))
+    np.savetxt(os.path.join(output_dir, 'losses_in.dat'), np.array(losses_in))
+    np.savetxt(os.path.join(output_dir, 'losses_bc.dat'), np.array(losses_bc))
 
     # Compute and save the trained results at training points.
     if verbose:
