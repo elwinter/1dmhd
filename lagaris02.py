@@ -1,108 +1,107 @@
-"""Problem definition file for a simple linear ODE.
+"""Problem definition file for Lagaris problem 2."""
 
-This module implements problem 2 in Lagaris et al (1998) (1st order ODE
-IVP).
-
-Note that an upper-case 'Y' is used to represent the Greek psi from the
-original equation.
-
-The equation is defined on the domain [0,1]:
-
-The analytical form of the equation is:
-    G(x, Y, dY/dx) = dY/dx + Y/5 - exp(-x/5)*cos(x) = 0
-
-with initial condition:
-
-Y(0) = 0
-
-This equation has the analytical solution for the supplied initial
-conditions:
-
-Ya(x) = exp(-x/5)*sin(x)
-
-Reference:
-
-Isaac Elias Lagaris, Aristidis Likas, and Dimitrios I. Fotiadis,
-"Artificial Neural Networks for Solving Ordinary and Partial Differential
-Equations", *IEEE Transactions on Neural Networks* **9**(5), pp. 987-999,
-1998
-
-The functions in this module are defined using a combination of Numpy and
-TensorFlow operations, so they can be used efficiently by the solution code.
-
-Author
-------
-Eric Winter (eric.winter62@gmail.com)
-"""
 
 import numpy as np
 import tensorflow as tf
 
 
+# Define the boundaries.
+x0 = 0
+x1 = 2
+
+
 # Define the initial condition.
-ic = 0.0
+bc0 = 0.0
 
 
-def differential_equation(X, Y, delY):
+def differential_equation(x, y, dy_dx):
     """Linear first-order ODE.
-
-    Equation 1 from Lagaris et al (1998).
-
-    n is the number of evaluation points for the equation,
-    equal to the length of X.
-
-    m is the number of independent variables (1 for ODE).
-
-    neq is the number of equations being solved (1 for ODE), and is
-    assumed to be the same as the number of dependent variables.
 
     Parameters
     ----------
-    X : tf.Variable, each shape (n, m)
+    x : tf.Variable, shape (n, 1)
         Independent variable values for computation of ODE.
-    Y : List of neq tf.Tensor, each shape(n, 1)
-        Dependent variable values at each x-value.
-    delY : List of neq tf.Tensor, each shape(n, m)
-        Gradient values at each x-value.
+    y : tf.Tensor, shape (n, 1)
+        Dependent variable values at each x-value. This is the array of the
+        current estimates of the solution at each x-value.
+    dy_dx : tf.Tensor, shape(n, 1)
+        1st derivative values for y at each x-value.
 
     Returns
     -------
-    G : tf.Tensor, shape (n, neq)
-        Value of equations at each x-value.
+    G : tf.Tensor, shape (n, 1)
+        Value of equation at each x-value, nominally 0.
     """
-    x = X
-    y = Y[0]
-    dy_dx = delY[0]
     G = dy_dx + y/5 - tf.math.exp(-x/5)*tf.math.cos(x)
     return G
 
 
-def analytical_solution(X):
+def compute_boundary_conditions(x):
+    """Compute the boundary conditions.
+
+    Parameters
+    ----------
+    x : np.ndarray of float
+        Values of x on the boundaries, shape (1,)
+
+    Returns
+    -------
+    bc : np.ndarray of float
+        Values of y on the boundaries, shape (1,)
+    """
+    nx = len(x)
+    bc = np.empty(nx)
+    for (i, xx) in enumerate(x):
+        if np.isclose(xx, x0):
+            z = bc0
+        else:
+            raise Exception
+        bc[i] = z
+    return bc
+
+
+def analytical_solution(x):
     """Analytical solution to ODE.
 
     Analytical solution to linear ODE.
 
     n is the number of evaluation points for the equation,
-    equal to the length of X.
-
-    m is the number of independent variables (1 for ODE).
-
-    neq is the number of equations being solved (1 for ODE), and is
-    assumed to be the same as the number of dependent variables.
+    equal to the length of x.
 
     Parameters
     ----------
-    X : tf.Variable, each shape (n, m)
+    x : tf.Variable, shape (n, 1)
         Independent variable values for computation of solution.
 
     Returns
     -------
-    Y : tf.Tensor, shape (n, neq)
-        Value of equations at each x-value.
+    y : tf.Tensor, shape (n, 1)
+        Analytical solution at each x-value.
     """
-    x = X
     Y = tf.math.exp(-x/5)*tf.math.sin(x)
     return Y
+
+
+def analytical_derivative(x):
+    """Analytical derivative of solution.
+
+    Analytical derivative of solution.
+
+    n is the number of evaluation points for the equation,
+    equal to the length of x.
+
+    Parameters
+    ----------
+    x : tf.Variable, shape (n, 1)
+        Independent variable values for computation of solution.
+
+    Returns
+    -------
+    dy_dx : tf.Tensor, shape (n, 1)
+        Analytical 1st derivative at each x-value.
+    """
+    dy_dx = 0.2*tf.math.exp(-x/5)*(5.0*tf.math.cos(x) - tf.math.sin(x))
+    return dy_dx
 
 
 def create_training_data(nx):
@@ -115,7 +114,7 @@ def create_training_data(nx):
     Parameters
     ----------
     nx : int
-        Number of points in x--dimension.
+        Number of points in x-dimension.
     
     Returns
     -------
@@ -127,12 +126,12 @@ def create_training_data(nx):
         Array of the single initial point.
     """
     # Create the array of all training points x.
-    x = np.linspace(0, 1, nx)
+    x = np.linspace(x0, x1, nx)
 
     # Now split the training data into two groups - inside the BC, and on the BC.
     # Initialize the mask to keep everything.
     mask = np.ones(len(x), dtype=bool)
-    # Mask off the point at x = 0.
+    # Mask off the point at x = x0.
     mask[0] = False
     x_in = x[mask]
     mask = np.logical_not(mask)
