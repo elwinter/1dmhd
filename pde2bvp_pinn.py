@@ -456,7 +456,7 @@ def main():
 
     t_start = datetime.datetime.now()
     if verbose:
-        print("Training started at %s, max_epochs = %s" % (t_start, max_epochs))
+        print("Training started at %s." % t_start)
 
     for epoch in range(max_epochs):
 
@@ -535,12 +535,11 @@ def main():
     # Save the loss function history.
     if verbose:
         print("Saving loss function history.")
-    np.savetxt(os.path.join(output_dir, 'losses.dat'),     np.array(losses))
+    np.savetxt(os.path.join(output_dir, 'losses.dat'), np.array(losses))
 
     # Compute and save the trained results at training points.
     if verbose:
         print("Computing and saving trained results.")
-    # with tf.GradientTape(persistent=True) as tape:
     Y_train = model(xy)
     np.savetxt(os.path.join(output_dir, "Y_train.dat"), Y_train.numpy().reshape((n_train,)))
 
