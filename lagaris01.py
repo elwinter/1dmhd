@@ -22,13 +22,13 @@ def differential_equation(x, y, dy_dx):
     y : tf.Tensor, shape (n, 1)
         Dependent variable values at each x-value. This is the array of the
         current estimates of the solution at each x-value.
-    dy_dx : tf.Tensor, shape(n, m)
+    dy_dx : tf.Tensor, shape(n, 1)
         1st derivative values for y at each x-value.
 
     Returns
     -------
     G : tf.Tensor, shape (n, 1)
-        Value of equations at each x-value, nominally 0.
+        Value of equation at each x-value, nominally 0.
     """
     G = (
         dy_dx + (x + (1 + 3*x**2)/(1 + x + x**3))*y - x**3 -
@@ -38,6 +38,18 @@ def differential_equation(x, y, dy_dx):
 
 
 def compute_boundary_conditions(x):
+    """Compute the boundary conditions.
+
+    Parameters
+    ----------
+    x : np.ndarray of float
+        Values of x on the boundaries, shape (1,)
+
+    Returns
+    -------
+    bc : np.ndarray of float
+        Values of y on the boundaries, shape (1,)
+    """
     nx = len(x)
     bc = np.empty(nx)
     for (i, xx) in enumerate(x):
@@ -55,22 +67,17 @@ def analytical_solution(x):
     Analytical solution to linear ODE.
 
     n is the number of evaluation points for the equation,
-    equal to the length of X.
-
-    m is the number of independent variables (1 for ODE).
-
-    neq is the number of equations being solved (1 for ODE), and is
-    assumed to be the same as the number of dependent variables.
+    equal to the length of x.
 
     Parameters
     ----------
-    x : tf.Variable, each shape (n, m)
+    x : tf.Variable, shape (n, 1)
         Independent variable values for computation of solution.
 
     Returns
     -------
-    y : tf.Tensor, shape (n, neq)
-        Value of equations at each x-value.
+    y : tf.Tensor, shape (n, 1)
+        Analytical solution at each x-value.
     """
     y = tf.math.exp(-x**2/2)/(1 + x + x**3) + x**2
     return y
@@ -82,16 +89,11 @@ def analytical_derivative(x):
     Analytical derivative of solution.
 
     n is the number of evaluation points for the equation,
-    equal to the length of X.
-
-    m is the number of independent variables (1 for ODE).
-
-    neq is the number of equations being solved (1 for ODE), and is
-    assumed to be the same as the number of dependent variables.
+    equal to the length of x.
 
     Parameters
     ----------
-    x : tf.Variable, each shape (n, m)
+    x : tf.Variable, shape (n, 1)
         Independent variable values for computation of solution.
 
     Returns

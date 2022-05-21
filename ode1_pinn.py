@@ -21,7 +21,6 @@ import os
 import platform
 import shutil
 import sys
-from telnetlib import DEBUGLEVEL
 
 # Import 3rd-party modules.
 import numpy as np
@@ -246,7 +245,7 @@ def save_hyperparameters(args, output_dir):
     """Save the neural network hyperparameters.
 
     Print a record of the hyperparameters of the neural network in the
-    specified directory.
+    specified directory, as an importable python module.
 
     Parameters
     ----------
@@ -437,7 +436,7 @@ def main():
     if debug:
         print("optimizer = %s" % optimizer)
 
-    # Train the models.
+    # Train the model.
 
     # Create the loss function history.
     losses = []
@@ -502,7 +501,7 @@ def main():
             # Shape is () (scalar).
             L = w_in*L_in + w_bc*L_bc
 
-        # Save the current loss.
+        # Save the current total loss.
         losses.append(L.numpy())
 
         # Save the current model weights.
