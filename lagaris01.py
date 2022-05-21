@@ -69,11 +69,11 @@ def analytical_solution(x):
 
     Returns
     -------
-    Y : tf.Tensor, shape (n, neq)
+    y : tf.Tensor, shape (n, neq)
         Value of equations at each x-value.
     """
-    Y = tf.math.exp(-x**2/2)/(1 + x + x**3) + x**2
-    return Y
+    y = tf.math.exp(-x**2/2)/(1 + x + x**3) + x**2
+    return y
 
 
 def analytical_derivative(x):
