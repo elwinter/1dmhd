@@ -2,7 +2,7 @@
 
 """Use a neural network to solve a 1st-order ODE BVP.
 
-This program will use a neural network to solve a 1st-order partial
+This program will use a neural network to solve a 1st-order ordinary
 differential equation boundary value problem.
 
 This code uses the PINN method.
