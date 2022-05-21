@@ -5,6 +5,9 @@
 This program will use a neural network to solve a 2nd-order ordinary
 differential equation boundary value problem.
 
+This code assumes the problem has the solution value specified at the first
+and last values of the independent variable.
+
 This code uses the PINN method.
 
 Author
@@ -79,9 +82,9 @@ system_information_file = "system_information.txt"
 hyperparameter_file = "hyperparameters.py"
 
 # Initial parameter ranges
-w0_range = [-0.1, 0.1]
-u0_range = [-0.1, 0.1]
-v0_range = [-0.1, 0.1]
+w0_range = [-0.1, 0.1]  # Hidden layer weights
+u0_range = [-0.1, 0.1]  # Hidden layer biases
+v0_range = [-0.1, 0.1]  # Output layer weights
 
 
 # Program global variables.
@@ -204,11 +207,6 @@ def create_output_directory(path):
     Returns
     -------
     None
-
-    Raises
-    ------
-    Exception
-        If the directory exists.
     """
     try:
         os.mkdir(path)
@@ -302,7 +300,7 @@ def save_problem_definition(problem, output_dir):
     shutil.copy(p.__file__, output_dir)
 
 
-def build_model(n_layers, H, activation="sigmoid"):
+def build_model(n_layers, H, activation):
     """Build a multi-layer neural network model.
 
     Build a fully-connected, multi-layer neural network with single output.
@@ -466,7 +464,7 @@ def main():
 
     t_start = datetime.datetime.now()
     if verbose:
-        print("Training started at %s, max_epochs = %s" % (t_start, max_epochs))
+        print("Training started at %s." % t_start, max_epochs)
 
     for epoch in range(max_epochs):
 

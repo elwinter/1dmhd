@@ -1,5 +1,6 @@
 """Problem definition file for Lagaris problem 1."""
 
+
 import numpy as np
 import tensorflow as tf
 
@@ -115,7 +116,7 @@ def create_training_data(nx):
     Parameters
     ----------
     nx : int
-        Number of points in x--dimension.
+        Number of points in x-dimension.
     
     Returns
     -------
