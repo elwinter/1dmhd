@@ -5,6 +5,9 @@
 This program will use a neural network to solve a 2nd-order partial
 differential equation boundary value problem.
 
+This code assumes the problem has the solution values specified at the first
+and last values of the independent variable.
+
 This code uses the PINN method.
 
 Author
@@ -19,6 +22,7 @@ import datetime
 from importlib import import_module
 import os
 import platform
+import shutil
 import sys
 
 # Import 3rd-party modules.
@@ -73,7 +77,7 @@ default_seed = 0
 # convergence.
 default_tolerance = 1e-6
 
-# Default weight to apply to the boundary condition loss.
+# Default normalized weight to apply to the boundary condition loss function.
 default_w_bc = 0.0
 
 # Name of system information file.
@@ -82,25 +86,22 @@ system_information_file = "system_information.txt"
 # Name of hyperparameter record file, as an importable Python module.
 hyperparameter_file = "hyperparameters.py"
 
-# Name of problem record file, as an importable Python module.
-problem_record_file = "problem.py"
-
 # Initial parameter ranges
-w0_range = [-0.1, 0.1]
-u0_range = [-0.1, 0.1]
-v0_range = [-0.1, 0.1]
+w0_range = [-0.1, 0.1]  # Hidden layer weights
+u0_range = [-0.1, 0.1]  # Hidden layer biases
+v0_range = [-0.1, 0.1]  # Output layer weights
 
 
 # Program global variables.
 
-# Global object to hold the problem definition.
+# Global object to hold the imported problem definition module.
 p = None
 
 
 def create_command_line_parser():
     """Create the command-line argument parser.
 
-    Create the command-line parser.
+    Create the command-line argument parser.
 
     Parameters
     ----------
@@ -157,12 +158,12 @@ def create_command_line_parser():
         help="Number of equally-spaced training points in x dimension (default: %(default)s)"
     )
     parser.add_argument(
-        "--ny_train", type=int, default=default_ny_train,
-        help="Number of equally-spaced training points in y dimension (default: %(default)s)"
-    )
-    parser.add_argument(
         "--nx_val", type=int, default=default_nx_val,
         help="Number of equally-spaced validation points in x dimension (default: %(default)s)"
+    )
+    parser.add_argument(
+        "--ny_train", type=int, default=default_ny_train,
+        help="Number of equally-spaced training points in y dimension (default: %(default)s)"
     )
     parser.add_argument(
         "--ny_val", type=int, default=default_ny_val,
@@ -198,7 +199,7 @@ def create_command_line_parser():
     )
     parser.add_argument(
         "-w", "--w_bc", type=float, default=default_w_bc,
-        help="Weight for boundary loss (default: %(default)s)."
+        help="Normalized weight for boundary condition loss function (default: %(default)s)."
     )
     parser.set_defaults(convcheck=True)
     parser.set_defaults(save_model=True)
@@ -206,10 +207,10 @@ def create_command_line_parser():
     return parser
 
 
-def create_output_directory(path="."):
+def create_output_directory(path):
     """Create an output directory for the results.
     
-    Create the specified directory. Skip if it already exists.
+    Create the specified directory. Do nothing if it already exists.
 
     Parameters
     ----------
@@ -226,7 +227,7 @@ def create_output_directory(path="."):
         pass
 
 
-def save_system_information(output_dir="."):
+def save_system_information(output_dir):
     """Save a summary of system characteristics.
     
     Save a summary of the host system in the specified directory.
@@ -252,13 +253,15 @@ def save_system_information(output_dir="."):
         f.write("Python compiler: %s\n" % platform.python_compiler())
         f.write("Python implementation: %s\n" % platform.python_implementation())
         f.write("Python file: %s\n" % __file__)
+        f.write("NumPy version: %s\n" % np.__version__)
+        f.write("TensorFlow version: %s\n" % tf.__version__)
 
 
-def save_hyperparameters(args, output_dir="."):
+def save_hyperparameters(args, output_dir):
     """Save the neural network hyperparameters.
     
     Print a record of the hyperparameters of the neural networks in the
-    specified directory.
+    specified directory, as an importable python module.
 
     Parameters
     ----------
@@ -273,47 +276,51 @@ def save_hyperparameters(args, output_dir="."):
     """
     path = os.path.join(output_dir, hyperparameter_file)
     with open(path, "w") as f:
-        f.write("n_layers = %s\n" % repr(args.n_layers))
+        f.write("activation = %s\n" % repr(args.activation))
+        f.write("convcheck = %s\n" % repr(args.convcheck))
+        f.write("learning_rate = %s\n" % repr(args.learning_rate))
+        f.write("max_epochs = %s\n" % repr(args.max_epochs))
         f.write("H = %s\n" % repr(args.n_hid))
+        f.write("n_layers = %s\n" % repr(args.n_layers))
+        f.write("nx_train = %s\n" % repr(args.nx_train))
+        f.write("nx_val = %s\n" % repr(args.nx_val))
+        f.write("ny_train = %s\n" % repr(args.ny_train))
+        f.write("ny_val = %s\n" % repr(args.ny_val))
+        f.write("precision = %s\n" % repr(args.precision))
+        f.write("random_seed = %s\n" % repr(args.seed))
+        f.write("tolerance = %s\n" % repr(args.tolerance))
+        f.write("w_bc = %s\n" % repr(args.w_bc))
         f.write("w0_range = %s\n" % repr(w0_range))
         f.write("u0_range = %s\n" % repr(u0_range))
         f.write("v0_range = %s\n" % repr(v0_range))
-        f.write("activation = %s\n" % repr(args.activation))
-        f.write("learning_rate = %s\n" % repr(args.learning_rate))
-        f.write("max_epochs = %s\n" % repr(args.max_epochs))
-        f.write("nx_train = %s\n" % repr(args.nx_train))
-        f.write("ny_train = %s\n" % repr(args.ny_train))
-        f.write("random_seed = %s\n" % repr(args.seed))
-        f.write("tol = %s\n" % repr(args.tolerance))
-        f.write("precision = %s\n" % repr(args.precision))
 
 
-def save_problem_definition(args, output_dir="."):
-    """Save the problem parameters for the run.
-    
-    Print a record of the problem description.
+def save_problem_definition(problem, output_dir):
+    """Save the problem definition for the run.
+
+    Copy the problem definition file to the output directory.
 
     Parameters
     ----------
-    args : dict
-        Dictionary of command-line arguments.
+    problem : module
+        Imported module object for problem definition.
     output_dir : str
-        Path to directory to contain the report.
+        Path to directory to contain the copy of the problem definition file.
 
     Returns
     -------
     None
     """
-    path = os.path.join(output_dir, problem_record_file)
-    with open(path, "w") as f:
-        f.write("problem_name = %s\n" % repr(args.problem))
+    # Copy the problem definition file to the output directory.
+    shutil.copy(p.__file__, output_dir)
 
 
-def build_model(n_layers, H, activation="sigmoid"):
+def build_model(n_layers, H, activation):
     """Build a multi-layer neural network model.
 
     Build a fully-connected, multi-layer neural network with single output.
-    Each layer will have H hidden nodes.
+    Each layer will have H hidden nodes. Each hidden node has weights and
+    a bias, and uses the specified activation function.
 
     The number of inputs is determined when the network is first used.
 
@@ -324,7 +331,7 @@ def build_model(n_layers, H, activation="sigmoid"):
     H : int
         Number of nodes to use in each hidden layer.
     activation : str
-        Name of activation function to use.
+        Name of activation function (from TensorFlow) to use.
 
     Returns
     -------
@@ -332,7 +339,7 @@ def build_model(n_layers, H, activation="sigmoid"):
         The neural network.
     """
     layers = []
-    for i in range(n_layers):
+    for _ in range(n_layers):
         hidden_layer = tf.keras.layers.Dense(
             units=H, use_bias=True,
             activation=tf.keras.activations.deserialize(activation),
@@ -375,7 +382,7 @@ def main():
     save_model = args.save_model
     save_weights = args.save_weights
     seed = args.seed
-    tol = args.tolerance
+    tolerance = args.tolerance
     verbose = args.verbose
     w_bc = args.w_bc
     if debug:
@@ -401,11 +408,13 @@ def main():
         print("Recording system information, model hyperparameters, and problem definition.")
     save_system_information(output_dir)
     save_hyperparameters(args, output_dir)
-    save_problem_definition(args, output_dir)
+    save_problem_definition(p, output_dir)
 
     # Create and save the training data.
     if verbose:
         print("Creating and saving training data.")
+    # These are each 2-D NumPy arrays.
+    # Shapes are (n_train, 2), (n_train_in, 2), (n_train_bc, 2)
     xy_train, xy_train_in, xy_train_bc = p.create_training_data(nx_train, ny_train)
     np.savetxt(os.path.join(output_dir, "xy_train.dat"), xy_train)
     n_train = len(xy_train)
@@ -413,41 +422,59 @@ def main():
     n_train_in = len(xy_train_in)
     np.savetxt(os.path.join(output_dir, "xy_train_bc.dat"), xy_train_bc)
     n_train_bc = len(xy_train_bc)
+    assert n_train_bc == 2*(nx_train + ny_train - 2)
     assert n_train == n_train_in + n_train_bc
 
     # Compute the boundary condition values.
     if verbose:
         print("Computing boundary conditions.")
+    # This is a 1-D NumPy array, of length n_train_bc.
     bc = p.compute_boundary_conditions(xy_train_bc)
+    # Reshape to a 2-D NumPy array, shape (n_train_bc, 1).
     bc = bc.reshape((n_train_bc, 1))
+    # Convert to a Tensor, shape (n_train_bc, 1).
     bc = tf.Variable(bc, dtype=precision)
+    if debug:
+        print("bc = %s" % bc)
 
-    # Compute the weight for the interior points.
+    # Compute the normalized weight for the interior points.
     w_in = 1.0 - w_bc
+    if debug:
+        print("w_in = %s" % w_in)
 
     # Build the model.
     if verbose:
         print("Creating neural network.")
     model = build_model(n_layers, H, activation)
+    if debug:
+        print("model = %s" % model)
 
     # Create the optimizer.
     if verbose:
         print("Creating optimizer.")
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    if debug:
+        print("optimizer = %s" % optimizer)
 
     # Train the model.
 
-    # Create history variables.
+    # Create the loss function histories.
     losses = []
+    losses_in = []
+    losses_bc = []
 
     # Set the random number seed for reproducibility.
     tf.random.set_seed(seed)
 
     # Rename the training data Variables for convenience.
+    # The 2-D NumPy arrays are converted to 2-D Variables.
+    # Shape (n_train, 2)
     xy_train_var = tf.Variable(xy_train, dtype=precision)
     xy = xy_train_var
+    # Shape (n_train_in, 2)
     xy_train_in_var = tf.Variable(xy_train_in, dtype=precision)
     xy_in = xy_train_in_var
+    # Shape (n_train_bc, 2)
     xy_train_bc_var = tf.Variable(xy_train_bc, dtype=precision)
     xy_bc = xy_train_bc_var
 
@@ -466,38 +493,53 @@ def main():
                 with tf.GradientTape(persistent=True) as tape1:
 
                     # Compute the network outputs within the domain.
+                    # Shape is (n_in, 1).
                     Y_in = model(xy_in)
 
                     # Compute the network outputs on the boundaries.
+                    # Shape is (n_bc, 1).
                     Y_bc = model(xy_bc)
 
                 # Compute the first derivatives at the interior training
                 # points.
+                # Shape is (n_in, 2).
                 delY_in = tape1.gradient(Y_in, xy_in)
 
             # Compute the second derivatives at the interior training points.
+            # Shape is (n_in, 1, n_in, 2).
             del2Y_jac_in = tape2.jacobian(delY_in, xy_in)
+            # Shape is (n_in, 1).
             d2Y_dx2_in = tf.reshape(tf.linalg.tensor_diag_part(del2Y_jac_in[:, 0, :, 0]), (n_train_in, 1))
+            # Shape is (n_in, 1).
             d2Y_dy2_in = tf.reshape(tf.linalg.tensor_diag_part(del2Y_jac_in[:, 1, :, 1]), (n_train_in, 1))
-            del2Y_in = [d2Y_dx2_in, d2Y_dy2_in]
+            # Shape is (n_in, 2).
+            del2Y_in = tf.stack([d2Y_dx2_in[:, 0], d2Y_dy2_in[:, 0]], axis=1)
 
-            # Compute the estimate of the differential equation at the interior training points.
+            # Compute the estimate of the differential equation at the
+            # interior training points.
+            # Shape is (n_in, 1).
             G_in = p.differential_equation(xy_in, Y_in, delY_in, del2Y_in)
 
             # Compute the errors in the computed boundary conditions.
+            # Shape is (n_bc, 1).
             E_bc = Y_bc - bc
 
             # Compute the loss functions for the interior training points.
+            # Shape is () (scalar).
             L_in = tf.math.sqrt(tf.reduce_sum(G_in**2)/n_train_in)
 
             # Compute the loss functions for the boundary points.
+            # Shape is () (scalar).
             L_bc = tf.math.sqrt(tf.reduce_sum(E_bc**2)/n_train_bc)
 
             # Compute the weighted total losses.
+            # Shape is () (scalar).
             L = w_in*L_in + w_bc*L_bc
 
         # Save the current losses.
         losses.append(L.numpy())
+        losses_in.append(L_in.numpy())
+        losses_bc.append(L_bc.numpy())
 
         # Save the current model weights.
         if save_weights:
@@ -507,18 +549,35 @@ def main():
         if convcheck:
             if epoch > 1:
                 loss_delta = losses[-1] - losses[-2]
-                if abs(loss_delta) <= tol:
+                if abs(loss_delta) <= tolerance:
                     converged = True
                     break
 
         # Compute the gradient of the loss function wrt the network parameters.
+        # The gradient object is a list of 3 or more Tensor objects. The shapes
+        # of these Tensor objects are the same as the shapes of the elements of
+        # the model.trainable_variables. More specifically:
+        #   * The first Tensor is for the gradient of the loss function wrt the
+        #     weights of the first hidden layer, and has shape (1, H).
+        #   * The second Tensor is for the gradient of the loss function wrt
+        #     the biases of the first hidden layer, and has shape (H,).
+        #   * If n_layers > 1, each subsequent pair of Tensor objects
+        #     represents the gradients of the loss function with respect to the
+        #     weights and biases of the next hidden layer, with layer index
+        #     increasing from the first hidden layer above the input layer, to
+        #     the last hidden layer below the output layer. The weight gradient
+        #     Tensor objects are shape (H, H), and the bias gradient Tensor
+        #     objects are shape (H,).
+        #   * The last Tensor is for the gradient of the loss function wrt the
+        #     weights of the output layer, and has shape (H, 1).
         pgrad = tape_param.gradient(L, model.trainable_variables)
 
         # Update the parameters for this epoch.
         optimizer.apply_gradients(zip(pgrad, model.trainable_variables))
 
         if verbose and epoch % 1 == 0:
-            print("Ending epoch %s, loss function = (%f, %f, %f)" % (epoch, L.numpy(), L_in.numpy(), L_bc.numpy()))
+            print("Ending epoch %s, (L, L_in, L_bc) = (%f, %f, %f)" %
+                  (epoch, L.numpy(), L_in.numpy(), L_bc.numpy()))
 
     # Count the last epoch.
     n_epochs = epoch + 1
@@ -532,32 +591,65 @@ def main():
         print("Final value of loss function: %f" % losses[-1])
         print("converged = %s" % converged)
 
-    # Save the loss function history.
+    # Save the loss function histories.
     if verbose:
-        print("Saving loss function history.")
+        print("Saving loss function histories.")
     np.savetxt(os.path.join(output_dir, 'losses.dat'), np.array(losses))
+    np.savetxt(os.path.join(output_dir, 'losses_in.dat'), np.array(losses_in))
+    np.savetxt(os.path.join(output_dir, 'losses_bc.dat'), np.array(losses_bc))
 
     # Compute and save the trained results at training points.
     if verbose:
         print("Computing and saving trained results.")
-    Y_train = model(xy)
+    with tf.GradientTape(persistent=True) as tape2:
+        with tf.GradientTape(persistent=True) as tape1:
+            # Shape (n_train, 1)
+            Y_train = model(xy)
+        # Shape (n_train, 2)
+        delY_train = tape1.gradient(Y_train, xy)
+    # Shape is (n_train, 1, n_train, 2).
+    del2Y_jac_train = tape2.jacobian(delY_train, xy)
+    # Shape is (n_train, 1).
+    d2Y_dx2_train = tf.reshape(tf.linalg.tensor_diag_part(del2Y_jac_train[:, 0, :, 0]), (n_train, 1))
+    # Shape is (n_train, 1).
+    d2Y_dy2_train = tf.reshape(tf.linalg.tensor_diag_part(del2Y_jac_train[:, 1, :, 1]), (n_train, 1))
+    # Shape is (n_train, 2).
+    del2Y_train = tf.stack([d2Y_dx2_train[:, 0], d2Y_dy2_train[:, 0]], axis=1)
     np.savetxt(os.path.join(output_dir, "Y_train.dat"), Y_train.numpy().reshape((n_train,)))
+    np.savetxt(os.path.join(output_dir, "delY_train.dat"), delY_train.numpy().reshape((n_train, 2)))
+    np.savetxt(os.path.join(output_dir, "del2Y_train.dat"), del2Y_train.numpy().reshape((n_train, 2)))
 
     # Compute and save the trained results at validation points.
     if verbose:
         print("Computing and saving validation results.")
+    # Shapes are (n_val, 2), (n_val_in, 2), (n_val_bc, 2).
     xy_val, xy_val_in, xy_val_bc = p.create_training_data(nx_val, ny_val)
     n_val = len(xy_val)
     n_val_in = len(xy_val_in)
     n_val_bc = len(xy_val_bc)
+    assert n_val_bc == 2*(nx_val + ny_val - 2)
     assert n_val_in + n_val_bc == n_val
     np.savetxt(os.path.join(output_dir, "xy_val.dat"), xy_val)
     np.savetxt(os.path.join(output_dir, "xy_val_in.dat"), xy_val_in)
     np.savetxt(os.path.join(output_dir, "xy_val_bc.dat"), xy_val_bc)
     xy_val = tf.Variable(xy_val.reshape(n_val, 2), dtype=precision)
-    # with tf.GradientTape(persistent=True) as tape:
-    Y_val = model(xy_val)
+    with tf.GradientTape(persistent=True) as tape2:
+        with tf.GradientTape(persistent=True) as tape1:
+            # Shape (n_val, 1)
+            Y_val = model(xy_val)
+        # Shape (n_val, 2)
+        delY_val = tape1.gradient(Y_val, xy_val)
+    # Shape is (n_val, 1, n_val, 2).
+    del2Y_jac_val = tape2.jacobian(delY_val, xy_val)
+    # Shape is (n_val, 1).
+    d2Y_dx2_val = tf.reshape(tf.linalg.tensor_diag_part(del2Y_jac_val[:, 0, :, 0]), (n_val, 1))
+    # Shape is (n_val, 1).
+    d2Y_dy2_val = tf.reshape(tf.linalg.tensor_diag_part(del2Y_jac_val[:, 1, :, 1]), (n_val, 1))
+    # Shape is (n_val, 2).
+    del2Y_val = tf.stack([d2Y_dx2_val[:, 0], d2Y_dy2_val[:, 0]], axis=1)
     np.savetxt(os.path.join(output_dir, "Y_val.dat"), Y_val.numpy().reshape((n_val,)))
+    np.savetxt(os.path.join(output_dir, "delY_val.dat"), delY_val.numpy().reshape((n_val, 2)))
+    np.savetxt(os.path.join(output_dir, "del2Y_val.dat"), del2Y_val.numpy().reshape((n_val, 2)))
 
     # Save the trained model.
     if save_model:
