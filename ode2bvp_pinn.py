@@ -464,7 +464,7 @@ def main():
 
     t_start = datetime.datetime.now()
     if verbose:
-        print("Training started at %s." % t_start, max_epochs)
+        print("Training started at %s." % t_start)
 
     for epoch in range(max_epochs):
 
