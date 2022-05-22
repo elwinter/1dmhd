@@ -14,6 +14,7 @@ import argparse
 import datetime
 import os
 import platform
+import shutil
 import sys
 
 # Import 3rd-party modules.
@@ -218,3 +219,23 @@ def save_system_information(output_dir):
         f.write("Python file: %s\n" % __file__)
         f.write("NumPy version: %s\n" % np.__version__)
         f.write("TensorFlow version: %s\n" % tf.__version__)
+
+
+def save_problem_definition(problem, output_dir):
+    """Save the problem definition for the run.
+
+    Copy the problem definition file to the output directory.
+
+    Parameters
+    ----------
+    problem : module
+        Imported module object for problem definition.
+    output_dir : str
+        Path to directory to contain the copy of the problem definition file.
+
+    Returns
+    -------
+    None
+    """
+    # Copy the problem definition file to the output directory.
+    shutil.copy(problem.__file__, output_dir)

@@ -21,9 +21,6 @@ Eric Winter (eric.winter62@gmail.com)
 import datetime
 from importlib import import_module
 import os
-import platform
-import shutil
-import sys
 
 # Import 3rd-party modules.
 import numpy as np
@@ -231,7 +228,7 @@ def main():
         print("Recording system information, model hyperparameters, and problem definition.")
     common.save_system_information(output_dir)
     save_hyperparameters(args, output_dir)
-    save_problem_definition(p, output_dir)
+    common.save_problem_definition(p, output_dir)
 
     # Create and save the training data.
     if verbose:

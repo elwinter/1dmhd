@@ -17,8 +17,6 @@ Eric Winter (eric.winter62@gmail.com)
 import datetime
 from importlib import import_module
 import os
-import platform
-import sys
 
 # Import 3rd-party modules.
 import numpy as np
@@ -130,27 +128,6 @@ def save_hyperparameters(args, output_dir="."):
         f.write("precision = %s\n" % repr(args.precision))
 
 
-def save_problem_definition(args, output_dir="."):
-    """Save the problem parameters for the run.
-    
-    Print a record of the problem description.
-
-    Parameters
-    ----------
-    args : dict
-        Dictionary of command-line arguments.
-    output_dir : str
-        Path to directory to contain the report.
-
-    Returns
-    -------
-    None
-    """
-    path = os.path.join(output_dir, problem_record_file)
-    with open(path, "w") as f:
-        f.write("problem_name = %s\n" % repr(args.problem))
-
-
 def build_model(n_layers, H, activation="sigmoid"):
     """Build a multi-layer neural network model.
 
@@ -243,7 +220,7 @@ def main():
         print("Recording system information, model hyperparameters, and problem definition.")
     common.save_system_information(output_dir)
     save_hyperparameters(args, output_dir)
-    save_problem_definition(args, output_dir)
+    common.save_problem_definition(p, output_dir)
 
     # Create and save the training data.
     if verbose:

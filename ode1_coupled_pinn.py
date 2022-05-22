@@ -17,8 +17,6 @@ Eric Winter (eric.winter62@gmail.com)
 import datetime
 from importlib import import_module
 import os
-import shutil
-import sys
 
 # Import 3rd-party modules.
 import numpy as np
@@ -114,26 +112,6 @@ def save_hyperparameters(args, output_dir):
         f.write("v0_range = %s\n" % repr(v0_range))
 
 
-def save_problem_definition(problem, output_dir):
-    """Save the problem definition for the run.
-
-    Copy the problem definition file to the output directory.
-
-    Parameters
-    ----------
-    problem : module
-        Imported module object for problem definition.
-    output_dir : str
-        Path to directory to contain the copy of the problem definition file.
-
-    Returns
-    -------
-    None
-    """
-    # Copy the problem definition file to the output directory.
-    shutil.copy(p.__file__, output_dir)
-
-
 def build_model(n_layers, H, activation):
     """Build a multi-layer neural network model.
 
@@ -226,7 +204,7 @@ def main():
         print("Recording system information, model hyperparameters, and problem definition.")
     common.save_system_information(output_dir)
     save_hyperparameters(args, output_dir)
-    save_problem_definition(p, output_dir)
+    common.save_problem_definition(p, output_dir)
 
     # Create and save the training data.
     if verbose:
