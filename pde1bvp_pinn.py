@@ -40,15 +40,6 @@ default_ny_val = 101
 # Default problem name.
 default_problem = "transport"
 
-# Name of hyperparameter record file, as an importable Python module.
-hyperparameter_file = "hyperparameters.py"
-
-
-# Program global variables.
-
-# Global object to hold the problem definition.
-p = None
-
 
 def create_command_line_argument_parser():
     """Create the command-line argument parser.
@@ -65,7 +56,7 @@ def create_command_line_argument_parser():
         Parser for command-line arguments.
     """
     # Create the common command-line parser.
-    parser = common.create_common_command_line_argument_parser(
+    parser = common.create_command_line_argument_parser(
         description, default_problem
     )
 
@@ -98,22 +89,10 @@ def save_hyperparameters(args, output_dir):
     -------
     None
     """
-    path = os.path.join(output_dir, hyperparameter_file)
-    with open(path, "w") as f:
-        f.write("activation = %s\n" % repr(args.activation))
-        f.write("convcheck = %s\n" % repr(args.convcheck))
-        f.write("learning_rate = %s\n" % repr(args.learning_rate))
-        f.write("max_epochs = %s\n" % repr(args.max_epochs))
-        f.write("H = %s\n" % repr(args.n_hid))
-        f.write("n_layers = %s\n" % repr(args.n_layers))
-        f.write("nx_train = %s\n" % repr(args.nx_train))
-        f.write("nx_val = %s\n" % repr(args.nx_val))
+    path = common.save_hyperparameters(args, output_dir)
+    with open(path, "a") as f:
         f.write("ny_train = %s\n" % repr(args.ny_train))
         f.write("ny_val = %s\n" % repr(args.ny_val))
-        f.write("precision = %s\n" % repr(args.precision))
-        f.write("random_seed = %s\n" % repr(args.seed))
-        f.write("tolerance = %s\n" % repr(args.tolerance))
-        f.write("w_bc = %s\n" % repr(args.w_bc))
 
 
 def main():
@@ -150,7 +129,6 @@ def main():
     tf.keras.backend.set_floatx(precision)
 
     # Import the problem to solve.
-    global p
     if verbose:
         print("Importing definition for problem '%s'." % problem)
     p = import_module(problem)

@@ -65,13 +65,17 @@ default_w_bc = 0.0
 # Name of file to hold the system information report.
 system_information_file = "system_information.txt"
 
+# Name of file to hold the network hyperparameters, as an importable Python
+# module.
+hyperparameter_file = "hyperparameters.py"
+
 # Initial parameter ranges
 w0_range = [-0.1, 0.1]  # Hidden layer weights
 u0_range = [-0.1, 0.1]  # Hidden layer biases
 v0_range = [-0.1, 0.1]  # Output layer weights
 
 
-def create_common_command_line_argument_parser(description, default_problem):
+def create_command_line_argument_parser(description, default_problem):
     """Create the common command-line argument parser.
 
     Create the common command-line argument parser.
@@ -287,3 +291,41 @@ def build_model(n_layers, H, activation):
     layers.append(output_layer)
     model = tf.keras.Sequential(layers)
     return model
+
+
+def save_hyperparameters(args, output_dir):
+    """Save the neural network hyperparameters.
+
+    Print a record of the hyperparameters of the neural network in the
+    specified directory, as an importable python module.
+
+    Parameters
+    ----------
+    args : dict
+        Dictionary of command-line arguments.
+    output_dir : str
+        Path to directory to contain the report.
+
+    Returns
+    -------
+    path : str
+        Path to hyperparameter file.
+    """
+    path = os.path.join(output_dir, hyperparameter_file)
+    with open(path, "w") as f:
+        f.write("activation = %s\n" % repr(args.activation))
+        f.write("convcheck = %s\n" % repr(args.convcheck))
+        f.write("learning_rate = %s\n" % repr(args.learning_rate))
+        f.write("max_epochs = %s\n" % repr(args.max_epochs))
+        f.write("H = %s\n" % repr(args.n_hid))
+        f.write("n_layers = %s\n" % repr(args.n_layers))
+        f.write("nx_train = %s\n" % repr(args.nx_train))
+        f.write("nx_val = %s\n" % repr(args.nx_val))
+        f.write("precision = %s\n" % repr(args.precision))
+        f.write("random_seed = %s\n" % repr(args.seed))
+        f.write("tolerance = %s\n" % repr(args.tolerance))
+        f.write("w_bc = %s\n" % repr(args.w_bc))
+        f.write("w0_range = %s\n" % repr(w0_range))
+        f.write("u0_range = %s\n" % repr(u0_range))
+        f.write("v0_range = %s\n" % repr(v0_range))
+    return path
