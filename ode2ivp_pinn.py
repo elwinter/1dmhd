@@ -18,7 +18,6 @@ Eric Winter (eric.winter62@gmail.com)
 
 
 # Import standard Python modules.
-import argparse
 import datetime
 from importlib import import_module
 import os
@@ -32,48 +31,17 @@ import numpy as np
 # Import TensorFlow.
 import tensorflow as tf
 
+# Import project modules.
+import common
+
 
 # Program constants
 
 # Program description.
 description = "Solve a 2nd-order ODE IVP using the PINN method."
 
-# Default activation function to use in hidden nodes.
-default_activation = "sigmoid"
-
-# Default learning rate.
-default_learning_rate = 0.01
-
-# Default maximum number of training epochs.
-default_max_epochs = 10
-
-# Default number of hidden nodes per layer.
-default_H = 10
-
-# Default number of layers in the fully-connected network, each with H nodes.
-default_n_layers = 1
-
-# Default number of training points in the x-dimension.
-default_nx_train = 11
-
-# Default number of validation points in the x-dimension.
-default_nx_val = 101
-
-# Default TensorFlow precision for computations.
-default_precision = "float32"
-
 # Default problem name.
 default_problem = "lagaris03ivp"
-
-# Default random number generator seed.
-default_seed = 0
-
-# Default absolute tolerance for consecutive loss function values to indicate
-# convergence.
-default_tolerance = 1e-6
-
-# Default normalized weight to apply to the boundary condition loss function.
-default_w_bc = 0.0
 
 # Name of file to hold the system information.
 system_information_file = "system_information.txt"
@@ -94,7 +62,7 @@ v0_range = [-0.1, 0.1]  # Output layer weights
 p = None
 
 
-def create_command_line_parser():
+def create_command_line_argument_parser():
     """Create the command-line argument parser.
 
     Create the command-line argument parser.
@@ -108,90 +76,10 @@ def create_command_line_parser():
     parser : argparse.ArgumentParser
         Parser for command-line arguments.
     """
-    parser = argparse.ArgumentParser(description=description)
-    parser.add_argument(
-        "-a", "--activation", type=str, default=default_activation,
-        help="Print debugging output (default: %(default)s)."
+    # Create the common command-line parser.
+    parser = common.create_common_command_line_argument_parser(
+        description, default_problem
     )
-    parser.add_argument(
-        "--convcheck", action="store_true",
-        help="Perform convergence check (default: %(default)s)."
-    )
-    parser.add_argument(
-        "-d", "--debug", action="store_true", default=False,
-        help="Print debugging output (default: %(default)s)."
-    )
-    parser.add_argument(
-        "--learning_rate", type=float, default=default_learning_rate,
-        help="Learning rate for training (default: %(default)s)"
-    )
-    parser.add_argument(
-        "--max_epochs", type=int, default=default_max_epochs,
-        help="Maximum number of training epochs (default: %(default)s)"
-    )
-    parser.add_argument(
-        "--no-convcheck", dest="convcheck", action="store_false",
-        help="Do not perform convergence check (default: %(default)s)."
-    )
-    parser.add_argument(
-        "--no-save_model", dest="save_model", action="store_false",
-        help="Do not save the trained model (default: %(default)s)."
-    )
-    parser.add_argument(
-        "--no-save_weights", dest="save_weights", action="store_false",
-        help="Do not save the model weights at each epoch (default: %(default)s)."
-    )
-    parser.add_argument(
-        "--n_hid", type=int, default=default_H,
-        help="Number of hidden nodes per layer (default: %(default)s)"
-    )
-    parser.add_argument(
-        "--n_layers", type=int, default=default_n_layers,
-        help="Number of hidden layers (default: %(default)s)"
-    )
-    parser.add_argument(
-        "--nx_train", type=int, default=default_nx_train,
-        help="Number of equally-spaced training points in x dimension (default: %(default)s)"
-    )
-    parser.add_argument(
-        "--nx_val", type=int, default=default_nx_val,
-        help="Number of equally-spaced validation points in x dimension (default: %(default)s)"
-    )
-    parser.add_argument(
-        "--precision", type=str, default=default_precision,
-        help="Precision to use in TensorFlow solution (default: %(default)s)"
-    )
-    parser.add_argument(
-        "--problem", type=str, default=default_problem,
-        help="Name of problem to solve (default: %(default)s)"
-    )
-    parser.add_argument(
-        "--save_model", action="store_true",
-        help="Save the trained model (default: %(default)s)."
-    )
-    parser.add_argument(
-        "--save_weights", action="store_true",
-        help="Save the model weights at each epoch (default: %(default)s)."
-    )
-    parser.add_argument(
-        "--seed", type=int, default=default_seed,
-        help="Seed for random number generator (default: %(default)s)"
-    )
-    parser.add_argument(
-        "--tolerance", type=float, default=default_tolerance,
-        help="Absolute loss function convergence tolerance (default: %(default)s)"
-    )
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", default=False,
-        help="Print verbose output (default: %(default)s)."
-    )
-    parser.add_argument(
-        "-w", "--w_bc", type=float, default=default_w_bc,
-        help="Normalized weight for boundary condition loss function (default: %(default)s)."
-    )
-    parser.set_defaults(convcheck=True)
-    parser.set_defaults(save_model=True)
-    parser.set_defaults(save_weights=False)
     return parser
 
 
@@ -348,7 +236,7 @@ def main():
     """Begin main program."""
 
     # Set up the command-line parser.
-    parser = create_command_line_parser()
+    parser = create_command_line_argument_parser()
 
     # Parse the command-line arguments.
     args = parser.parse_args()
