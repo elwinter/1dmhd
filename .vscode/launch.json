@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--debug", "--verbose", "--no-convcheck", "--max_epochs", "1000", "--w_bc", "0.4"]
+            "args": ["--debug", "--verbose", "--no-convcheck", "--w_bc", "0.1"]
         }
     ]
 }
