@@ -123,7 +123,8 @@ def create_command_line_argument_parser(description, default_problem):
     )
     parser.add_argument(
         "--no-save_weights", dest="save_weights", action="store_false",
-        help="Do not save the model weights at each epoch (default: %(default)s)."
+        help="Do not save the model weights at each epoch "
+             "(default: %(default)s)."
     )
     parser.add_argument(
         "--n_hid", type=int, default=default_n_hid,
@@ -135,11 +136,13 @@ def create_command_line_argument_parser(description, default_problem):
     )
     parser.add_argument(
         "--nx_train", type=int, default=default_nx_train,
-        help="Number of equally-spaced training points in x dimension (default: %(default)s)"
+        help="Number of equally-spaced training points in x dimension "
+             "(default: %(default)s)"
     )
     parser.add_argument(
         "--nx_val", type=int, default=default_nx_val,
-        help="Number of equally-spaced validation points in x dimension (default: %(default)s)"
+        help="Number of equally-spaced validation points in x dimension "
+             "(default: %(default)s)"
     )
     parser.add_argument(
         "--precision", type=str, default=default_precision,
@@ -163,7 +166,8 @@ def create_command_line_argument_parser(description, default_problem):
     )
     parser.add_argument(
         "--tolerance", type=float, default=default_tolerance,
-        help="Absolute loss function convergence tolerance (default: %(default)s)"
+        help="Absolute loss function convergence tolerance "
+             "(default: %(default)s)"
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", default=False,
@@ -182,21 +186,21 @@ def create_command_line_argument_parser(description, default_problem):
 
 def create_output_directory(path):
     """Create an output directory for the results.
-    
+
     Create the specified directory. Do nothing if it already exists.
 
     Parameters
     ----------
     path : str
         Path to directory to create.
-    
+
     Returns
     -------
     None
     """
     try:
         os.mkdir(path)
-    except:
+    except FileExistsError:
         pass
 
 
@@ -224,7 +228,8 @@ def save_system_information(output_dir):
         f.write("Python version: %s\n" % sys.version)
         f.write("Python build: %s\n" % " ".join(platform.python_build()))
         f.write("Python compiler: %s\n" % platform.python_compiler())
-        f.write("Python implementation: %s\n" % platform.python_implementation())
+        f.write("Python implementation: %s\n" %
+                platform.python_implementation())
         f.write("Python file: %s\n" % __file__)
         f.write("NumPy version: %s\n" % np.__version__)
         f.write("TensorFlow version: %s\n" % tf.__version__)
@@ -250,7 +255,7 @@ def save_problem_definition(problem, output_dir):
     shutil.copy(problem.__file__, output_dir)
 
 
-def build_model(n_layers, H, activation):
+def build_model(n_layers, n_hidden, activation):
     """Build a multi-layer neural network model.
 
     Build a fully-connected, multi-layer neural network with single output.
@@ -263,7 +268,7 @@ def build_model(n_layers, H, activation):
     ----------
     n_layers : int
         Number of hidden layers to create.
-    H : int
+    n_hidden : int
         Number of nodes to use in each hidden layer.
     activation : str
         Name of activation function (from TensorFlow) to use.
@@ -276,7 +281,7 @@ def build_model(n_layers, H, activation):
     layers = []
     for _ in range(n_layers):
         hidden_layer = tf.keras.layers.Dense(
-            units=H, use_bias=True,
+            units=n_hidden, use_bias=True,
             activation=tf.keras.activations.deserialize(activation),
             kernel_initializer=tf.keras.initializers.RandomUniform(*w0_range),
             bias_initializer=tf.keras.initializers.RandomUniform(*u0_range)
