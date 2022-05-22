@@ -96,26 +96,6 @@ def create_command_line_argument_parser():
     return parser
 
 
-def create_output_directory(path="."):
-    """Create an output directory for the results.
-    
-    Create the specified directory. Skip if it already exists.
-
-    Parameters
-    ----------
-    path : str
-        Path to directory to create.
-    
-    Returns
-    -------
-    None
-    """
-    try:
-        os.mkdir(path)
-    except:
-        pass
-
-
 def save_system_information(output_dir="."):
     """Save a summary of system characteristics.
     
@@ -284,7 +264,7 @@ def main():
 
     # Set up the output directory under the current directory.
     output_dir = os.path.join(".", problem)
-    create_output_directory(output_dir)
+    common.create_output_directory(output_dir)
 
     # Record system information, network parameters, and problem definition.
     if verbose:

@@ -11,6 +11,7 @@ Eric Winter (eric.winter62@gmail.com)
 
 # Import standard modules.
 import argparse
+import os
 
 
 # Default values for command-line arguments
@@ -154,3 +155,23 @@ def create_common_command_line_argument_parser(description, default_problem):
     parser.set_defaults(save_model=True)
     parser.set_defaults(save_weights=False)
     return parser
+
+
+def create_output_directory(path):
+    """Create an output directory for the results.
+    
+    Create the specified directory. Do nothing if it already exists.
+
+    Parameters
+    ----------
+    path : str
+        Path to directory to create.
+    
+    Returns
+    -------
+    None
+    """
+    try:
+        os.mkdir(path)
+    except:
+        pass
