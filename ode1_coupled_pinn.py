@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
-"""Use a set of neural networks to solve coupled ODE.
+"""Use a pair of neural networks to solve 2 coupled ODE IVP.
 
-This program will use a set of neural networks to solve 2 coupled
-1st-order ODE.
+This program will use a pair of neural networks to solve 2 coupled
+1st-order ODE IVP.
 
 This code uses the PINN method.
 
@@ -19,6 +19,7 @@ import datetime
 from importlib import import_module
 import os
 import platform
+import shutil
 import sys
 
 # Import 3rd-party modules.
@@ -31,7 +32,7 @@ import tensorflow as tf
 # Program constants
 
 # Program description.
-description = "Solve 2 coupled 1st-order ODE, using the PINN method."
+description = "Solve 2 coupled 1st-order ODE IVP, using the PINN method."
 
 # Default activation function to use in hidden nodes.
 default_activation = "sigmoid"
@@ -67,7 +68,7 @@ default_seed = 0
 # convergence.
 default_tolerance = 1e-6
 
-# Default normalized weight to apply to the boundary condition loss.
+# Default normalized weight to apply to the boundary condition loss function.
 default_w_bc = 0.0
 
 # Name of system information file.
@@ -76,25 +77,22 @@ system_information_file = "system_information.txt"
 # Name of hyperparameter record file, as an importable Python module.
 hyperparameter_file = "hyperparameters.py"
 
-# Name of problem record file, as an importable Python module.
-problem_record_file = "problem.py"
-
 # Initial parameter ranges
-w0_range = [-0.1, 0.1]
-u0_range = [-0.1, 0.1]
-v0_range = [-0.1, 0.1]
+w0_range = [-0.1, 0.1]  # Hidden layer weights
+u0_range = [-0.1, 0.1]  # Hidden layer biases
+v0_range = [-0.1, 0.1]  # Output layer weights
 
 
 # Program global variables.
 
-# Global object to hold the problem definition.
+# Global object to hold the imported problem definition module.
 p = None
 
 
 def create_command_line_parser():
     """Create the command-line argument parser.
 
-    Create the command-line parser.
+    Create the command-line argument parser.
 
     Parameters
     ----------
@@ -111,6 +109,10 @@ def create_command_line_parser():
         help="Print debugging output (default: %(default)s)."
     )
     parser.add_argument(
+        "--convcheck", action="store_true",
+        help="Perform convergence check (default: %(default)s)."
+    )
+    parser.add_argument(
         "-d", "--debug", action="store_true", default=False,
         help="Print debugging output (default: %(default)s)."
     )
@@ -123,8 +125,16 @@ def create_command_line_parser():
         help="Maximum number of training epochs (default: %(default)s)"
     )
     parser.add_argument(
-        "--noconvcheck", action="store_true", default=False,
+        "--no-convcheck", dest="convcheck", action="store_false",
         help="Do not perform convergence check (default: %(default)s)."
+    )
+    parser.add_argument(
+        "--no-save_model", dest="save_model", action="store_false",
+        help="Do not save the trained model (default: %(default)s)."
+    )
+    parser.add_argument(
+        "--no-save_weights", dest="save_weights", action="store_false",
+        help="Do not save the model weights at each epoch (default: %(default)s)."
     )
     parser.add_argument(
         "--n_hid", type=int, default=default_H,
@@ -151,6 +161,14 @@ def create_command_line_parser():
         help="Name of problem to solve (default: %(default)s)"
     )
     parser.add_argument(
+        "--save_model", action="store_true",
+        help="Save the trained model (default: %(default)s)."
+    )
+    parser.add_argument(
+        "--save_weights", action="store_true",
+        help="Save the model weights at each epoch (default: %(default)s)."
+    )
+    parser.add_argument(
         "--seed", type=int, default=default_seed,
         help="Seed for random number generator (default: %(default)s)"
     )
@@ -164,29 +182,27 @@ def create_command_line_parser():
     )
     parser.add_argument(
         "-w", "--w_bc", type=float, default=default_w_bc,
-        help="Weight for boundary loss (default: %(default)s)."
+        help="Normalized weight for boundary condition loss function (default: %(default)s)."
     )
+    parser.set_defaults(convcheck=True)
+    parser.set_defaults(save_model=True)
+    parser.set_defaults(save_weights=False)
     return parser
 
 
-def create_output_directory(path="."):
+def create_output_directory(path):
     """Create an output directory for the results.
-    
-    Create the specified directory. Abort if it already exists.
+
+    Create the specified directory. Do nothing if it already exists.
 
     Parameters
     ----------
     path : str
         Path to directory to create.
-    
+
     Returns
     -------
     None
-
-    Raises
-    ------
-    Exception
-        If the directory exists.
     """
     try:
         os.mkdir(path)
@@ -194,16 +210,16 @@ def create_output_directory(path="."):
         pass
 
 
-def save_system_information(output_dir="."):
+def save_system_information(output_dir):
     """Save a summary of system characteristics.
-    
+
     Save a summary of the host system in the specified directory.
 
     Parameters
     ----------
     output_dir : str
         Path to directory to contain the report.
-    
+
     Returns
     -------
     None
@@ -220,13 +236,15 @@ def save_system_information(output_dir="."):
         f.write("Python compiler: %s\n" % platform.python_compiler())
         f.write("Python implementation: %s\n" % platform.python_implementation())
         f.write("Python file: %s\n" % __file__)
+        f.write("NumPy version: %s\n" % np.__version__)
+        f.write("TensorFlow version: %s\n" % tf.__version__)
 
 
-def save_hyperparameters(args, output_dir="."):
+def save_hyperparameters(args, output_dir):
     """Save the neural network hyperparameters.
-    
-    Print a record of the hyperparameters of the neural networks in the
-    specified directory.
+
+    Print a record of the hyperparameters of the neural network in the
+    specified directory, as an importable python module.
 
     Parameters
     ----------
@@ -241,46 +259,51 @@ def save_hyperparameters(args, output_dir="."):
     """
     path = os.path.join(output_dir, hyperparameter_file)
     with open(path, "w") as f:
-        f.write("n_layers = %s\n" % repr(args.n_layers))
+        f.write("activation = %s\n" % repr(args.activation))
+        f.write("convcheck = %s\n" % repr(args.convcheck))
+        f.write("learning_rate = %s\n" % repr(args.learning_rate))
+        f.write("max_epochs = %s\n" % repr(args.max_epochs))
         f.write("H = %s\n" % repr(args.n_hid))
+        f.write("n_layers = %s\n" % repr(args.n_layers))
+        f.write("nx_train = %s\n" % repr(args.nx_train))
+        f.write("nx_val = %s\n" % repr(args.nx_val))
+        f.write("precision = %s\n" % repr(args.precision))
+        f.write("random_seed = %s\n" % repr(args.seed))
+        f.write("tolerance = %s\n" % repr(args.tolerance))
+        f.write("w_bc = %s\n" % repr(args.w_bc))
         f.write("w0_range = %s\n" % repr(w0_range))
         f.write("u0_range = %s\n" % repr(u0_range))
         f.write("v0_range = %s\n" % repr(v0_range))
-        f.write("activation = %s\n" % repr(args.activation))
-        f.write("learning_rate = %s\n" % repr(args.learning_rate))
-        f.write("max_epochs = %s\n" % repr(args.max_epochs))
-        f.write("nx_train = %s\n" % repr(args.nx_train))
-        f.write("random_seed = %s\n" % repr(args.seed))
-        f.write("tol = %s\n" % repr(args.tolerance))
-        f.write("precision = %s\n" % repr(args.precision))
 
 
-def save_problem_definition(args, output_dir="."):
-    """Save the problem parameters for the run.
-    
-    Print a record of the problem description.
+def save_problem_definition(problem, output_dir):
+    """Save the problem definition for the run.
+
+    Copy the problem definition file to the output directory.
 
     Parameters
     ----------
-    args : dict
-        Dictionary of command-line arguments.
+    problem : module
+        Imported module object for problem definition.
     output_dir : str
-        Path to directory to contain the report.
+        Path to directory to contain the copy of the problem definition file.
 
     Returns
     -------
     None
     """
-    path = os.path.join(output_dir, problem_record_file)
-    with open(path, "w") as f:
-        f.write("problem_name = %s\n" % repr(args.problem))
+    # Copy the problem definition file to the output directory.
+    shutil.copy(p.__file__, output_dir)
 
 
-def build_model(n_layers, H, activation="sigmoid"):
+def build_model(n_layers, H, activation):
     """Build a multi-layer neural network model.
 
     Build a fully-connected, multi-layer neural network with single output.
-    Each layer will have H hidden nodes.
+    Each layer will have H hidden nodes. Each hidden node has weights and
+    a bias, and uses the specified activation function.
+
+    The number of inputs is determined when the network is first used.
 
     Parameters
     ----------
@@ -289,7 +312,7 @@ def build_model(n_layers, H, activation="sigmoid"):
     H : int
         Number of nodes to use in each hidden layer.
     activation : str
-        Name of activation function to use.
+        Name of activation function (from TensorFlow) to use.
 
     Returns
     -------
@@ -297,7 +320,7 @@ def build_model(n_layers, H, activation="sigmoid"):
         The neural network.
     """
     layers = []
-    for i in range(n_layers):
+    for _ in range(n_layers):
         hidden_layer = tf.keras.layers.Dense(
             units=H, use_bias=True,
             activation=tf.keras.activations.deserialize(activation),
@@ -325,18 +348,20 @@ def main():
     # Parse the command-line arguments.
     args = parser.parse_args()
     activation = args.activation
+    convcheck = args.convcheck
     debug = args.debug
     learning_rate = args.learning_rate
     max_epochs = args.max_epochs
     H = args.n_hid
-    noconvcheck = args.noconvcheck
     n_layers = args.n_layers
-    # nt_train = args.nt_train
     nx_train = args.nx_train
     nx_val = args.nx_val
+    precision = args.precision
     problem = args.problem
+    save_model = args.save_model
+    save_weights = args.save_weights
     seed = args.seed
-    tol = args.tolerance
+    tolerance = args.tolerance
     verbose = args.verbose
     w_bc = args.w_bc
     if debug:
@@ -353,7 +378,8 @@ def main():
     if debug:
         print("p = %s" % p)
 
-    # Set up the output directory under the current directory.
+    # Create the output directory, named after the problem, under the current
+    # directory.
     output_dir = os.path.join(".", problem)
     create_output_directory(output_dir)
 
@@ -362,11 +388,12 @@ def main():
         print("Recording system information, model hyperparameters, and problem definition.")
     save_system_information(output_dir)
     save_hyperparameters(args, output_dir)
-    save_problem_definition(args, output_dir)
+    save_problem_definition(p, output_dir)
 
     # Create and save the training data.
     if verbose:
         print("Creating and saving training data.")
+    # These are each 1-D NumPy arrays.
     x_train, x_train_in, x_train_bc = p.create_training_data(nx_train)
     np.savetxt(os.path.join(output_dir, "x_train.dat"), x_train)
     n_train = len(x_train)
@@ -374,40 +401,66 @@ def main():
     n_train_in = len(x_train_in)
     np.savetxt(os.path.join(output_dir, "x_train_bc.dat"), x_train_bc)
     n_train_bc = len(x_train_bc)
+    assert n_train_bc == 1
     assert n_train == n_train_in + n_train_bc
 
     # Compute the initial condition values.
     if verbose:
         print("Computing initial conditions.")
-    ic1 = tf.Variable([[p.ic1]], dtype=args.precision)
-    ic2 = tf.Variable([[p.ic2]], dtype=args.precision)
+    # This is a 1-D NumPy array, of length 1.
+    bc1 = p.compute_boundary_conditions_1(x_train_bc)
+    bc2 = p.compute_boundary_conditions_2(x_train_bc)
+    # Reshape to a 2-D NumPy array, shape (1, 1).
+    bc1 = bc1.reshape((n_train_bc, 1))
+    bc2 = bc2.reshape((n_train_bc, 1))
+    # Convert to a Tensor, shape (1, 1).
+    bc1 = tf.Variable(bc1, dtype=precision)
+    bc2 = tf.Variable(bc2, dtype=precision)
+    if debug:
+        print("bc1 = %s" % bc1)
+        print("bc2 = %s" % bc2)
 
-    # Compute the weight for the interior points.
+    # Compute the normalized weight for the interior points.
     w_in = 1.0 - w_bc
+    if debug:
+        print("w_in = %s" % w_in)
 
     # Build the models.
     if verbose:
         print("Creating neural networks.")
     model1 = build_model(n_layers, H, activation)
     model2 = build_model(n_layers, H, activation)
+    if debug:
+        print("model1 = %s" % model1)
+        print("model2 = %s" % model2)
 
     # Create the optimizer.
     if verbose:
         print("Creating optimizer.")
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    if debug:
+        print("optimizer = %s" % optimizer)
 
     # Train the models.
 
-    # Create history variables.
-    losses_y1 = []
-    losses_y2 = []
+    # Create the loss function histories.
     losses = []
+    losses_1 = []
+    losses_2 = []
+    losses_in = []
+    losses_in_1 = []
+    losses_in_2 = []
+    losses_bc = []
+    losses_bc_1 = []
+    losses_bc_2 = []
 
     # Set the random number seed for reproducibility.
     tf.random.set_seed(seed)
 
     # Rename the training data Variables for convenience.
     x_train_var = tf.Variable(x_train.reshape(n_train, 1), dtype=args.precision)
+    # The 1-D NumPy arrays must be reshaped to shape (n_train, 1) since
+    # TensorFlow needs these variables to have 2 dimensions.
     x = x_train_var
     x_train_in_var = tf.Variable(x_train_in.reshape(n_train_in, 1), dtype=args.precision)
     x_in = x_train_in_var
@@ -419,7 +472,7 @@ def main():
 
     t_start = datetime.datetime.now()
     if verbose:
-        print("Training started at %s, max_epochs = %s" % (t_start, max_epochs))
+        print("Training started at %s." % t_start)
 
     for epoch in range(max_epochs):
 
@@ -428,56 +481,93 @@ def main():
             with tf.GradientTape(persistent=True) as tape0:
 
                 # Compute the network outputs within the domain.
+                # Shape is (n_in, 1).
                 y1_in = model1(x_in)
                 y2_in = model2(x_in)
 
                 # Compute the network outputs on the boundaries.
+                # Shape is (n_bc, 1) == (1, 1).
                 y1_bc = model1(x_bc)
                 y2_bc = model2(x_bc)
 
-            # Compute the gradients of the network outputs wrt inputs at the interior training points.
-            del_y1_in = tape0.gradient(y1_in, x_in)
-            del_y2_in = tape0.gradient(y2_in, x_in)
+            # Compute the gradients of the network outputs wrt inputs at the
+            # interior training points.
+            # Shape is (n_in, 1).
+            dy1_dx_in = tape0.gradient(y1_in, x_in)
+            dy2_dx_in = tape0.gradient(y2_in, x_in)
 
-            # Compute the estimate of the differential equation at the interior training points.
-            Y_in = [y1_in, y2_in]
-            del_Y_in = [del_y1_in, del_y2_in]
-            G_y1_in = p.differential_equation_1(x_in, Y_in, del_Y_in)
-            G_y2_in = p.differential_equation_2(x_in, Y_in, del_Y_in)
+            # Compute the estimates of the differential equations at the
+            # interior training points.
+            # Shape is (n_in, 1).
+            y_in = [y1_in, y2_in]
+            dy_dx_in = [dy1_dx_in, dy2_dx_in]
+            G_y1_in = p.differential_equation_1(x_in, y_in, dy_dx_in)
+            G_y2_in = p.differential_equation_2(x_in, y_in, dy_dx_in)
 
             # Compute the errors in the computed initial condition.
-            E_y1_bc = y1_bc - p.ic1
-            E_y2_bc = y2_bc - p.ic2
+            # Shape is (n_bc, 1) == (1, 1).
+            E_y1_bc = y1_bc - bc1
+            E_y2_bc = y2_bc - bc2
 
             # Compute the loss functions for the interior training points.
+            # Shape is () (scalar).
             L_y1_in = tf.math.sqrt(tf.reduce_sum(G_y1_in**2)/n_train_in)
             L_y2_in = tf.math.sqrt(tf.reduce_sum(G_y2_in**2)/n_train_in)
             L_in = L_y1_in + L_y2_in
 
-            # Compute the loss functions for the boundary points.
+            # Compute the loss functions for the initial points.
+            # Shape is () (scalar).
             L_y1_bc = tf.math.sqrt(tf.reduce_sum(E_y1_bc**2)/n_train_bc)
             L_y2_bc = tf.math.sqrt(tf.reduce_sum(E_y2_bc**2)/n_train_bc)
             L_bc = L_y1_bc + L_y2_bc
 
             # Compute the weighted total losses.
+            # Shape is () (scalar).
             L_y1 = w_in*L_y1_in + w_bc*L_y1_bc
             L_y2 = w_in*L_y2_in + w_bc*L_y2_bc
             L = w_in*L_in + w_bc*L_bc
 
         # Save the current losses.
-        losses_y1.append(L_y1.numpy())
-        losses_y2.append(L_y2.numpy())
         losses.append(L.numpy())
+        losses_1.append(L_y1.numpy())
+        losses_2.append(L_y2.numpy())
+        losses_in.append(L_in.numpy())
+        losses_in_1.append(L_y1_in.numpy())
+        losses_in_2.append(L_y2_in.numpy())
+        losses_bc.append(L_bc.numpy())
+        losses_bc_1.append(L_y1_bc.numpy())
+        losses_bc_2.append(L_y2_bc.numpy())
+
+        # Save the current model weights.
+        if save_weights:
+            model1.save_weights(os.path.join(output_dir, "weights1", "weights_%06d" % epoch))
+            model2.save_weights(os.path.join(output_dir, "weights2", "weights_%06d" % epoch))
 
         # Check for convergence.
-        if not noconvcheck:
+        if convcheck:
             if epoch > 1:
                 loss_delta = losses[-1] - losses[-2]
-                if abs(loss_delta) <= tol:
+                if abs(loss_delta) <= tolerance:
                     converged = True
                     break
 
-        # Compute the gradient of the loss function wrt the network parameters.
+        # Compute the gradients of the loss function wrt the network parameters.
+        # The gradient object is a list of 3 or more Tensor objects. The shapes
+        # of these Tensor objects are the same as the shapes of the elements of
+        # the model.trainable_variables. More specifically:
+        #   * The first Tensor is for the gradient of the loss function wrt the
+        #     weights of the first hidden layer, and has shape (1, H).
+        #   * The second Tensor is for the gradient of the loss function wrt
+        #     the biases of the first hidden layer, and has shape (H,).
+        #   * If n_layers > 1, each subsequent pair of Tensor objects
+        #     represents the gradients of the loss function with respect to the
+        #     weights and biases of the next hidden layer, with layer index
+        #     increasing from the first hidden layer above the input layer, to
+        #     the last hidden layer below the output layer. The weight gradient
+        #     Tensor objects are shape (H, H), and the bias gradient Tensor
+        #     objects are shape (H,).
+        #   * The last Tensor is for the gradient of the loss function wrt the
+        #     weights of the output layer, and has shape (H, 1).
         pgrad_y1 = tape1.gradient(L, model1.trainable_variables)
         pgrad_y2 = tape1.gradient(L, model2.trainable_variables)
 
@@ -486,8 +576,8 @@ def main():
         optimizer.apply_gradients(zip(pgrad_y2, model2.trainable_variables))
 
         if verbose and epoch % 1 == 0:
-            print("Ending epoch %s, (L, L_in, L_bc) = (%f, %f, %f)" %
-                  (epoch, L.numpy(), L_in.numpy(), L_bc.numpy()))
+            print("Ending epoch %s, (L, L_in, L_bc, L_y1, L_y1_in, L_y1_bc, L_y2, L_y2_in, L_y2_bc) = (%f, %f, %f, %f, %f, %f, %f, %f, %f)" %
+                  (epoch, L.numpy(), L_in.numpy(), L_bc.numpy(), L_y1.numpy(), L_y1_in.numpy(), L_y1_bc.numpy(), L_y2.numpy(), L_y2_in.numpy(), L_y2_bc.numpy()))
 
     # Count the last epoch.
     n_epochs = epoch + 1
@@ -504,22 +594,36 @@ def main():
     # Save the loss function histories.
     if verbose:
         print("Saving loss function histories.")
-    np.savetxt(os.path.join(output_dir, 'losses_y1.dat'), np.array(losses_y1))
-    np.savetxt(os.path.join(output_dir, 'losses_y2.dat'), np.array(losses_y2))
-    np.savetxt(os.path.join(output_dir, 'losses.dat'),     np.array(losses))
+    np.savetxt(os.path.join(output_dir, 'losses.dat'), np.array(losses))
+    np.savetxt(os.path.join(output_dir, 'losses_1.dat'), np.array(losses_1))
+    np.savetxt(os.path.join(output_dir, 'losses_2.dat'), np.array(losses_2))
+    np.savetxt(os.path.join(output_dir, 'losses_in.dat'), np.array(losses_in))
+    np.savetxt(os.path.join(output_dir, 'losses_in_1.dat'), np.array(losses_in_1))
+    np.savetxt(os.path.join(output_dir, 'losses_in_2.dat'), np.array(losses_in_2))
+    np.savetxt(os.path.join(output_dir, 'losses_bc.dat'), np.array(losses_bc))
+    np.savetxt(os.path.join(output_dir, 'losses_bc_1.dat'), np.array(losses_bc_1))
+    np.savetxt(os.path.join(output_dir, 'losses_bc_2.dat'), np.array(losses_bc_2))
 
     # Compute and save the trained results at training points.
     if verbose:
         print("Computing and saving trained results.")
     with tf.GradientTape(persistent=True) as tape:
+        # Shape (n_train, 1)
         y1_train = model1(x)
         y2_train = model2(x)
+    # Shape (n_train, 1)
+    dy1_dx_train = tape.gradient(y1_train, x)
+    dy2_dx_train = tape.gradient(y2_train, x)
+    # Reshape the 2-D Tensor objects to 1-D NumPy arrays.
     np.savetxt(os.path.join(output_dir, "y1_train.dat"), y1_train.numpy().reshape((n_train,)))
     np.savetxt(os.path.join(output_dir, "y2_train.dat"), y2_train.numpy().reshape((n_train,)))
+    np.savetxt(os.path.join(output_dir, "dy1_dx_train.dat"), dy1_dx_train.numpy().reshape((n_train,)))
+    np.savetxt(os.path.join(output_dir, "dy2_dx_train.dat"), dy2_dx_train.numpy().reshape((n_train,)))
 
     # Compute and save the trained results at validation points.
     if verbose:
         print("Computing and saving validation results.")
+    # Shapes (n_val,), (n_val_in), (n_val_bc,) == (1,).
     x_val, x_val_in, x_val_bc = p.create_training_data(nx_val)
     n_val = len(x_val)
     n_val_in = len(x_val_in)
@@ -528,12 +632,24 @@ def main():
     np.savetxt(os.path.join(output_dir, "x_val.dat"), x_val)
     np.savetxt(os.path.join(output_dir, "x_val_in.dat"), x_val_in)
     np.savetxt(os.path.join(output_dir, "x_val_bc.dat"), x_val_bc)
+    # Reshape to 2-D Tensor, shape (n_val, 1).
     x_val = tf.Variable(x_val.reshape(n_val, 1), dtype=args.precision)
     with tf.GradientTape(persistent=True) as tape:
+        # Shape (n_val, 1)
         y1_val = model1(x_val)
         y2_val = model2(x_val)
+    # Shape (n_val, 1)
+    dy1_dx_val = tape.gradient(y1_val, x_val)
+    dy2_dx_val = tape.gradient(y2_val, x_val)
     np.savetxt(os.path.join(output_dir, "y1_val.dat"), y1_val.numpy().reshape((n_val,)))
     np.savetxt(os.path.join(output_dir, "y2_val.dat"), y2_val.numpy().reshape((n_val,)))
+    np.savetxt(os.path.join(output_dir, "dy1_dx_val.dat"), dy1_dx_val.numpy().reshape((n_val,)))
+    np.savetxt(os.path.join(output_dir, "dy2_dx_val.dat"), dy2_dx_val.numpy().reshape((n_val,)))
+
+    # Save the trained model.
+    if save_model:
+        model1.save(os.path.join(output_dir, "model1"))
+        model2.save(os.path.join(output_dir, "model2"))
 
 
 if __name__ == "__main__":
