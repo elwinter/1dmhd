@@ -11,7 +11,14 @@ Eric Winter (eric.winter62@gmail.com)
 
 # Import standard modules.
 import argparse
+import datetime
 import os
+import platform
+import sys
+
+# Import 3rd-party modules.
+import numpy as np
+import tensorflow as tf
 
 
 # Default values for command-line arguments
@@ -50,6 +57,12 @@ default_tolerance = 1e-6
 
 # Default normalized weight to apply to the boundary condition loss function.
 default_w_bc = 0.0
+
+
+# Module constants
+
+# Name of file to hold the system information report.
+system_information_file = "system_information.txt"
 
 
 def create_common_command_line_argument_parser(description, default_problem):
@@ -175,3 +188,33 @@ def create_output_directory(path):
         os.mkdir(path)
     except:
         pass
+
+
+def save_system_information(output_dir):
+    """Save a summary of system characteristics.
+
+    Save a summary of the host system in the specified directory.
+
+    Parameters
+    ----------
+    output_dir : str
+        Path to directory to contain the report.
+
+    Returns
+    -------
+    None
+    """
+    path = os.path.join(output_dir, system_information_file)
+    with open(path, "w") as f:
+        f.write("System report:\n")
+        f.write("Start time: %s\n" % datetime.datetime.now())
+        f.write("Host name: %s\n" % platform.node())
+        f.write("Platform: %s\n" % platform.platform())
+        f.write("uname: " + " ".join(platform.uname()) + "\n")
+        f.write("Python version: %s\n" % sys.version)
+        f.write("Python build: %s\n" % " ".join(platform.python_build()))
+        f.write("Python compiler: %s\n" % platform.python_compiler())
+        f.write("Python implementation: %s\n" % platform.python_implementation())
+        f.write("Python file: %s\n" % __file__)
+        f.write("NumPy version: %s\n" % np.__version__)
+        f.write("TensorFlow version: %s\n" % tf.__version__)

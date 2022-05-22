@@ -17,9 +17,7 @@ Eric Winter (eric.winter62@gmail.com)
 import datetime
 from importlib import import_module
 import os
-import platform
 import shutil
-import sys
 
 # Import 3rd-party modules.
 import numpy as np
@@ -38,9 +36,6 @@ description = "Solve a 1st-order ODE BVP using the PINN method."
 
 # Default problem name.
 default_problem = "lagaris01"
-
-# Name of file to hold the system information.
-system_information_file = "system_information.txt"
 
 # Name of file to hold the network hyperparameters, as an importable Python
 # module.
@@ -77,36 +72,6 @@ def create_command_line_argument_parser():
         description, default_problem
     )
     return parser
-
-
-def save_system_information(output_dir):
-    """Save a summary of system characteristics.
-
-    Save a summary of the host system in the specified directory.
-
-    Parameters
-    ----------
-    output_dir : str
-        Path to directory to contain the report.
-
-    Returns
-    -------
-    None
-    """
-    path = os.path.join(output_dir, system_information_file)
-    with open(path, "w") as f:
-        f.write("System report:\n")
-        f.write("Start time: %s\n" % datetime.datetime.now())
-        f.write("Host name: %s\n" % platform.node())
-        f.write("Platform: %s\n" % platform.platform())
-        f.write("uname: " + " ".join(platform.uname()) + "\n")
-        f.write("Python version: %s\n" % sys.version)
-        f.write("Python build: %s\n" % " ".join(platform.python_build()))
-        f.write("Python compiler: %s\n" % platform.python_compiler())
-        f.write("Python implementation: %s\n" % platform.python_implementation())
-        f.write("Python file: %s\n" % __file__)
-        f.write("NumPy version: %s\n" % np.__version__)
-        f.write("TensorFlow version: %s\n" % tf.__version__)
 
 
 def save_hyperparameters(args, output_dir):
@@ -255,7 +220,7 @@ def main():
     # Record system information, network parameters, and problem definition.
     if verbose:
         print("Recording system information, model hyperparameters, and problem definition.")
-    save_system_information(output_dir)
+    common.save_system_information(output_dir)
     save_hyperparameters(args, output_dir)
     save_problem_definition(p, output_dir)
 
