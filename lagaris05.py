@@ -20,8 +20,8 @@ def differential_equation(xy, Y, delY, del2Y):
     xy : tf.Variable, shape (n, 2)
         Independent variable (x, y) values for computation of PDE.
     Y : tf.Tensor, shape (n, 1)
-        Dependent variable values at each (x, y)-value. This is the array of the
-        current estimates of the solution at each point.
+        Dependent variable values at each (x, y)-value. This is the array of
+        the current estimates of the solution at each point.
     delY : tf.Tensor, shape(n, 2)
         1st derivative values wrt (x, y) at each point.
     del2Y : tf.Tensor, shape(n, 2)
@@ -35,8 +35,8 @@ def differential_equation(xy, Y, delY, del2Y):
     n = xy.shape[0]
     x = tf.reshape(xy[:, 0], (n, 1))
     y = tf.reshape(xy[:, 1], (n, 1))
-    dY_dx = tf.reshape(delY[:, 0], (n, 1))
-    dY_dy = tf.reshape(delY[:, 1], (n, 1))
+    # dY_dx = tf.reshape(delY[:, 0], (n, 1))
+    # dY_dy = tf.reshape(delY[:, 1], (n, 1))
     d2Y_dx2 = tf.reshape(del2Y[:, 0], (n, 1))
     d2Y_dy2 = tf.reshape(del2Y[:, 1], (n, 1))
     G = d2Y_dx2 + d2Y_dy2 - (x - 2 + y**3 + 6*y)*tf.math.exp(-x)
@@ -208,7 +208,7 @@ def create_training_data(nx, ny):
     ----------
     nx, ny : int
         Number of points in x-dimension and y-dimension.
-    
+
     Returns
     -------
     xy : np.ndarray, shape (nx*ny, 2)
@@ -225,7 +225,8 @@ def create_training_data(nx, ny):
     Y = np.tile(y, nx)
     xy = np.vstack([X, Y]).T
 
-    # Now split the training data into two groups - inside the BC, and on the BC.
+    # Now split the training data into two groups - inside the BC, and on the
+    # BC.
     # Initialize the mask to keep everything.
     mask = np.ones(nx*ny, dtype=bool)
     # Mask off the points at x = 0.

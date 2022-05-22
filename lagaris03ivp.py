@@ -129,7 +129,10 @@ def analytical_2nd_derivative(x):
     d2y_dx2 : tf.Tensor, shape (n, 1)
         Analytical 2nd derivative at each x-value.
     """
-    d2y_dx2 = 0.2*tf.math.exp(-0.2*x)*(-5.*tf.math.sin(x) - tf.math.cos(x)) - 0.04*tf.math.exp(-0.2*x)*(5.0*tf.math.cos(x) - tf.math.sin(x))
+    d2y_dx2 = (
+        0.2*tf.math.exp(-0.2*x)*(-5.*tf.math.sin(x) - tf.math.cos(x))
+        - 0.04*tf.math.exp(-0.2*x)*(5.0*tf.math.cos(x) - tf.math.sin(x))
+    )
     return d2y_dx2
 
 
@@ -144,7 +147,7 @@ def create_training_data(nx):
     ----------
     nx : int
         Number of points in x-dimension.
-    
+
     Returns
     -------
     x : np.ndarray, shape (nx,)
@@ -157,7 +160,8 @@ def create_training_data(nx):
     # Create the array of all training points x.
     x = np.linspace(x0, x1, nx)
 
-    # Now split the training data into two groups - inside the BC, and on the BC.
+    # Now split the training data into two groups - inside the BC, and on the
+    # BC.
     # Initialize the mask to keep everything.
     mask = np.ones(len(x), dtype=bool)
     # Mask off the point at x = x0.

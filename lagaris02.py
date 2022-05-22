@@ -115,7 +115,7 @@ def create_training_data(nx):
     ----------
     nx : int
         Number of points in x-dimension.
-    
+
     Returns
     -------
     x : np.ndarray, shape (nx,)
@@ -128,7 +128,8 @@ def create_training_data(nx):
     # Create the array of all training points x.
     x = np.linspace(x0, x1, nx)
 
-    # Now split the training data into two groups - inside the BC, and on the BC.
+    # Now split the training data into two groups - inside the BC, and on the
+    # BC.
     # Initialize the mask to keep everything.
     mask = np.ones(len(x), dtype=bool)
     # Mask off the point at x = x0.

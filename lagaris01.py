@@ -32,8 +32,8 @@ def differential_equation(x, y, dy_dx):
         Value of equation at each x-value, nominally 0.
     """
     G = (
-        dy_dx + (x + (1 + 3*x**2)/(1 + x + x**3))*y - x**3 -
-        2*x - x**2*(1 + 3*x**2)/(1 + x + x**3)
+        dy_dx + (x + (1 + 3*x**2)/(1 + x + x**3))*y - x**3
+        - 2*x - x**2*(1 + 3*x**2)/(1 + x + x**3)
     )
     return G
 
@@ -102,7 +102,9 @@ def analytical_derivative(x):
     dy_dx : tf.Tensor, shape (n, 1)
         Analytical 1st derivative at each x-value.
     """
-    dy_dx = 2*x - tf.math.exp(-x**2/2)*(1 + x + 4*x**2 + x**4)/(1 + x + x**3)**2
+    dy_dx = (
+        2*x - tf.math.exp(-x**2/2)*(1 + x + 4*x**2 + x**4)/(1 + x + x**3)**2
+    )
     return dy_dx
 
 
@@ -117,7 +119,7 @@ def create_training_data(nx):
     ----------
     nx : int
         Number of points in x-dimension.
-    
+
     Returns
     -------
     x : np.ndarray, shape (nx,)
@@ -130,7 +132,8 @@ def create_training_data(nx):
     # Create the array of all training points x.
     x = np.linspace(x0, x1, nx)
 
-    # Now split the training data into two groups - inside the BC, and on the BC.
+    # Now split the training data into two groups - inside the BC, and on the
+    # BC.
     # Initialize the mask to keep everything.
     mask = np.ones(len(x), dtype=bool)
     # Mask off the point at x = x0.
