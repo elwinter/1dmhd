@@ -65,6 +65,11 @@ default_w_bc = 0.0
 # Name of file to hold the system information report.
 system_information_file = "system_information.txt"
 
+# Initial parameter ranges
+w0_range = [-0.1, 0.1]  # Hidden layer weights
+u0_range = [-0.1, 0.1]  # Hidden layer biases
+v0_range = [-0.1, 0.1]  # Output layer weights
+
 
 def create_common_command_line_argument_parser(description, default_problem):
     """Create the common command-line argument parser.
@@ -239,3 +244,46 @@ def save_problem_definition(problem, output_dir):
     """
     # Copy the problem definition file to the output directory.
     shutil.copy(problem.__file__, output_dir)
+
+
+def build_model(n_layers, H, activation):
+    """Build a multi-layer neural network model.
+
+    Build a fully-connected, multi-layer neural network with single output.
+    Each layer will have H hidden nodes. Each hidden node has weights and
+    a bias, and uses the specified activation function.
+
+    The number of inputs is determined when the network is first used.
+
+    Parameters
+    ----------
+    n_layers : int
+        Number of hidden layers to create.
+    H : int
+        Number of nodes to use in each hidden layer.
+    activation : str
+        Name of activation function (from TensorFlow) to use.
+
+    Returns
+    -------
+    model : tf.keras.Sequential
+        The neural network.
+    """
+    layers = []
+    for _ in range(n_layers):
+        hidden_layer = tf.keras.layers.Dense(
+            units=H, use_bias=True,
+            activation=tf.keras.activations.deserialize(activation),
+            kernel_initializer=tf.keras.initializers.RandomUniform(*w0_range),
+            bias_initializer=tf.keras.initializers.RandomUniform(*u0_range)
+        )
+        layers.append(hidden_layer)
+    output_layer = tf.keras.layers.Dense(
+        units=1,
+        activation=tf.keras.activations.linear,
+        kernel_initializer=tf.keras.initializers.RandomUniform(*v0_range),
+        use_bias=False,
+    )
+    layers.append(output_layer)
+    model = tf.keras.Sequential(layers)
+    return model

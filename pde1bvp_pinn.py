@@ -20,8 +20,6 @@ import os
 
 # Import 3rd-party modules.
 import numpy as np
-
-# Import TensorFlow.
 import tensorflow as tf
 
 # Import project modules.
@@ -42,19 +40,8 @@ default_ny_val = 101
 # Default problem name.
 default_problem = "transport"
 
-# Name of system information file.
-system_information_file = "system_information.txt"
-
 # Name of hyperparameter record file, as an importable Python module.
 hyperparameter_file = "hyperparameters.py"
-
-# Name of problem record file, as an importable Python module.
-problem_record_file = "problem.py"
-
-# Initial parameter ranges
-w0_range = [-0.1, 0.1]
-u0_range = [-0.1, 0.1]
-v0_range = [-0.1, 0.1]
 
 
 # Program global variables.
@@ -94,11 +81,11 @@ def create_command_line_argument_parser():
     return parser
 
 
-def save_hyperparameters(args, output_dir="."):
+def save_hyperparameters(args, output_dir):
     """Save the neural network hyperparameters.
     
-    Print a record of the hyperparameters of the neural network in the
-    specified directory.
+    Print a record of the hyperparameters of the neural networks in the
+    specified directory, as an importable python module.
 
     Parameters
     ----------
@@ -113,61 +100,20 @@ def save_hyperparameters(args, output_dir="."):
     """
     path = os.path.join(output_dir, hyperparameter_file)
     with open(path, "w") as f:
-        f.write("n_layers = %s\n" % repr(args.n_layers))
-        f.write("H = %s\n" % repr(args.n_hid))
-        f.write("w0_range = %s\n" % repr(w0_range))
-        f.write("u0_range = %s\n" % repr(u0_range))
-        f.write("v0_range = %s\n" % repr(v0_range))
         f.write("activation = %s\n" % repr(args.activation))
+        f.write("convcheck = %s\n" % repr(args.convcheck))
         f.write("learning_rate = %s\n" % repr(args.learning_rate))
         f.write("max_epochs = %s\n" % repr(args.max_epochs))
+        f.write("H = %s\n" % repr(args.n_hid))
+        f.write("n_layers = %s\n" % repr(args.n_layers))
         f.write("nx_train = %s\n" % repr(args.nx_train))
+        f.write("nx_val = %s\n" % repr(args.nx_val))
         f.write("ny_train = %s\n" % repr(args.ny_train))
-        f.write("random_seed = %s\n" % repr(args.seed))
-        f.write("tol = %s\n" % repr(args.tolerance))
+        f.write("ny_val = %s\n" % repr(args.ny_val))
         f.write("precision = %s\n" % repr(args.precision))
-
-
-def build_model(n_layers, H, activation="sigmoid"):
-    """Build a multi-layer neural network model.
-
-    Build a fully-connected, multi-layer neural network with single output.
-    Each layer will have H hidden nodes.
-
-    The number of inputs is determined when the network is first used.
-
-    Parameters
-    ----------
-    n_layers : int
-        Number of hidden layers to create.
-    H : int
-        Number of nodes to use in each hidden layer.
-    activation : str
-        Name of activation function to use.
-
-    Returns
-    -------
-    model : tf.keras.Sequential
-        The neural network.
-    """
-    layers = []
-    for i in range(n_layers):
-        hidden_layer = tf.keras.layers.Dense(
-            units=H, use_bias=True,
-            activation=tf.keras.activations.deserialize(activation),
-            kernel_initializer=tf.keras.initializers.RandomUniform(*w0_range),
-            bias_initializer=tf.keras.initializers.RandomUniform(*u0_range)
-        )
-        layers.append(hidden_layer)
-    output_layer = tf.keras.layers.Dense(
-        units=1,
-        activation=tf.keras.activations.linear,
-        kernel_initializer=tf.keras.initializers.RandomUniform(*v0_range),
-        use_bias=False,
-    )
-    layers.append(output_layer)
-    model = tf.keras.Sequential(layers)
-    return model
+        f.write("random_seed = %s\n" % repr(args.seed))
+        f.write("tolerance = %s\n" % repr(args.tolerance))
+        f.write("w_bc = %s\n" % repr(args.w_bc))
 
 
 def main():
@@ -247,7 +193,7 @@ def main():
     # Build the model.
     if verbose:
         print("Creating neural network.")
-    model = build_model(n_layers, H, activation)
+    model = common.build_model(n_layers, H, activation)
 
     # Create the optimizer.
     if verbose:
