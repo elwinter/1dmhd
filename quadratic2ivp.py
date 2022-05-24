@@ -1,28 +1,18 @@
-"""Problem definition file for 2nd-order ODE IVP.
+"""Problem definition file for 2nd-order ODE IVP."""
 
-This problem definition file describes:
-
-    d2y_dx2 - 2 = 0
-    y(0) = 0
-    dy_dx(0) = 0
-    y(x) = x**2
-
-The functions in this module are defined using a combination of Numpy and
-TensorFlow operations, so they can be used efficiently by the solution code.
-
-Author
-------
-Eric Winter (eric.winter62@gmail.com)
-"""
 
 import numpy as np
+import tensorflow as tf
 
 
-# Define the initial conditions.
-x0 = 0
-x1 = 1
-bc0a = 0.0
-bc0b = 0.0
+# Define the boundaries.
+x0 = 0.0
+x1 = 1.0
+
+# Define the boundary condition at x = x0.
+bc0_0 = 0.0  # Solution value
+bc0_1 = 0.0  # 1st derivative value
+
 
 def differential_equation(x, y, dy_dx, d2y_dx2):
     """2nd-order ODE IVP.
@@ -47,6 +37,34 @@ def differential_equation(x, y, dy_dx, d2y_dx2):
     return G
 
 
+def compute_boundary_conditions(x):
+    """Compute the boundary conditions.
+
+    Parameters
+    ----------
+    x : np.ndarray of float
+        Values of x on the boundaries, shape (2,)
+
+    Returns
+    -------
+    bc0 : np.ndarray of float
+        Values of y on the boundary, shape (1,)
+    bc1 : np.ndarray of float
+        Values of dy/dx on the boundary, shape (1,)
+    """
+    nx = len(x)
+    bc0 = np.empty(nx)
+    bc1 = np.empty(nx)
+    for (i, xx) in enumerate(x):
+        if np.isclose(xx, x0):
+            z0 = bc0_0
+            z1 = bc0_1
+        else:
+            raise Exception
+        bc0[i] = z0
+        bc1[i] = z1
+    return bc0, bc1
+
 def analytical_solution(x):
     """Analytical solution to differential_equation.
 
@@ -67,6 +85,51 @@ def analytical_solution(x):
     """
     y = x**2
     return y
+
+
+def analytical_derivative(x):
+    """Analytical derivative of solution.
+
+    Analytical derivative of solution.
+
+    n is the number of evaluation points for the equation,
+    equal to the length of x.
+
+    Parameters
+    ----------
+    x : tf.Variable, shape (n, 1)
+        Independent variable values for computation of solution.
+
+    Returns
+    -------
+    dy_dx : tf.Tensor, shape (n, 1)
+        Analytical 1st derivative at each x-value.
+    """
+    dy_dx = 2.0*x
+    return dy_dx
+
+
+def analytical_2nd_derivative(x):
+    """Analytical derivative of solution.
+
+    Analytical derivative of solution.
+
+    n is the number of evaluation points for the equation,
+    equal to the length of x.
+
+    Parameters
+    ----------
+    x : tf.Variable, shape (n, 1)
+        Independent variable values for computation of solution.
+
+    Returns
+    -------
+    dy_dx : tf.Tensor, shape (n, 1)
+        Analytical 1st derivative at each x-value.
+    """
+    dy_dx = x.copy()
+    dy_dx[...] = 2.0
+    return dy_dx
 
 
 def create_training_data(nx):

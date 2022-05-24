@@ -1,87 +1,96 @@
-"""Problem definition file for a simple ODE.
+"""Problem definition file for exponential."""
 
-This problem definition file describes:
-
-    dy/dx - exp(x) = 0
-    y(0) = 1
-    y(x) = exp(x)
-
-The functions in this module are defined using a combination of Numpy and
-TensorFlow operations, so they can be used efficiently by the solution code.
-
-Author
-------
-Eric Winter (eric.winter62@gmail.com)
-"""
 
 import numpy as np
 import tensorflow as tf
 
 
-# Define the initial condition.
-ic = 1.0
+# Define the boundaries.
+x0 = 0.0
+x1 = 1.0
+
+# Define the boundary condition at x = x0.
+bc0 = 1.0
 
 
-def differential_equation(X, Y, delY):
-    """First-order ODE.
-
-    Simple 1st-order ODE.
-
-    n is the number of evaluation points for the equation,
-    equal to the length of X.
-
-    m is the number of independent variables (1 for ODE).
-
-    neq is the number of equations being solved (1 for ODE), and is
-    assumed to be the same as the number of dependent variables.
+def differential_equation(x, y, dy_dx):
+    """The differential equation.
 
     Parameters
     ----------
-    X : tf.Variable, each shape (n, m)
+    x : tf.Variable, shape (n, 1)
         Independent variable values for computation of ODE.
-    Y : List of neq tf.Tensor, each shape(n, 1)
-        Dependent variable values at each x-value.
-    delY : List of neq tf.Tensor, each shape(n, m)
-        Gradient values at each x-value.
+    y : tf.Tensor, shape (n, 1)
+        Dependent variable values at each x-value. This is the array of the
+        current estimates of the solution at each x-value.
+    dy_dx : tf.Tensor, shape(n, 1)
+        1st derivative values for y at each x-value.
 
     Returns
     -------
-    G : tf.Tensor, shape (n, neq)
-        Value of equations at each x-value.
+    G : tf.Tensor, shape (n, 1)
+        Value of equation at each x-value, nominally 0.
     """
-    x = X
-    y = Y[0]
-    dy_dx = delY[0]
     G = dy_dx - tf.math.exp(x)
     return G
 
 
-def analytical_solution(X):
-    """Analytical solution to ODE.
-
-    Analytical solution to linear ODE.
-
-    n is the number of evaluation points for the equation,
-    equal to the length of X.
-
-    m is the number of independent variables (1 for ODE).
-
-    neq is the number of equations being solved (1 for ODE), and is
-    assumed to be the same as the number of dependent variables.
+def compute_boundary_conditions(x):
+    """Compute the boundary conditions.
 
     Parameters
     ----------
-    X : tf.Variable, each shape (n, m)
+    x : np.ndarray of float
+        Values of x on the boundaries, shape (1,)
+
+    Returns
+    -------
+    bc : np.ndarray of float
+        Values of y on the boundaries, shape (1,)
+    """
+    nx = len(x)
+    bc = np.empty(nx)
+    for (i, xx) in enumerate(x):
+        if np.isclose(xx, x0):
+            z = bc0
+        else:
+            raise Exception
+        bc[i] = z
+    return bc
+
+
+def analytical_solution(x):
+    """Analytical solution.
+
+    Parameters
+    ----------
+    x : tf.Variable, shape (n, 1)
         Independent variable values for computation of solution.
 
     Returns
     -------
-    Y : tf.Tensor, shape (n, neq)
-        Value of equations at each x-value.
+    y : tf.Tensor, shape (n, 1)
+        Analytical solution at each x-value.
     """
-    x = X
-    Y = tf.math.exp(x)
-    return Y
+    y = tf.math.exp(x)
+    return y
+
+
+def analytical_derivative(x):
+    """Analytical derivative of solution.
+
+    Parameters
+    ----------
+    x : tf.Variable, shape (n, 1)
+        Independent variable values for computation of solution.
+
+    Returns
+    -------
+    dy_dx : tf.Tensor, shape (n, 1)
+        Analytical 1st derivative at each x-value.
+    """
+    dy_dx = tf.math.exp(x)
+    return dy_dx
 
 
 def create_training_data(nx):
@@ -106,7 +115,7 @@ def create_training_data(nx):
         Array of the single initial point.
     """
     # Create the array of all training points x.
-    x = np.linspace(0, 1, nx)
+    x = np.linspace(x0, x1, nx)
 
     # Now split the training data into two groups - inside the BC, and on the BC.
     # Initialize the mask to keep everything.
