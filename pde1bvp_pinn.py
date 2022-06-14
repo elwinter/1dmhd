@@ -74,7 +74,7 @@ def create_command_line_argument_parser():
 
 def save_hyperparameters(args, output_dir):
     """Save the neural network hyperparameters.
-    
+
     Print a record of the hyperparameters of the neural networks in the
     specified directory, as an importable python module.
 
