@@ -1,11 +1,11 @@
 """Problem definition file for static 1-D MHD problem.
 
 This problem definition file describes a static situation: unit pressure and
-density, all else is 0. The run should just converge to fixed values for each
-quantity.
+density, all else is 0. The run should just converge to the initial values for
+each quantity.
 
 The problem is defined on the domain 0 <= (x, t) <= 1. Velocity and magnetic
-field are 0.
+field are 0. Bx is fixed at a constant value.
 
 The functions in this module are defined using a combination of Numpy and
 TensorFlow operations, so they can be used efficiently by 1dmhd.py.
@@ -44,12 +44,15 @@ t0 = 0.0
 t1 = 1.0
 
 # Adiabatic index.
-# gamma = 1.4
+gamma = 1.5
+
+# Strength of axial magnetic field.
+Bx = 0.0
 
 # Conditions at x = 0, all t.
 bc0 = [1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
-# Conditions at x = 1, all t.
+# Conditions at t = 0, all x.
 bc1 = [1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 
@@ -69,9 +72,9 @@ def create_training_data(nx, nt):
     -------
     xt : np.ndarray, shape (nx*nt, 2)
         Array of all [x, t] points.
-    xt_in : np.ndarray, shape ((nx - 2)*(nt - 1)), 2)
+    xt_in : np.ndarray, shape ((nx - 1)*(nt - 1)), 2)
         Array of all [x, t] points.
-    xt_bc : np.ndarray, shape (2*nt + nx - 2, 2)
+    xt_bc : np.ndarray, shape (nt + nx - 1, 2)
         Array of all [x, t] points.
     """
     # Create the array of all training points (x, t), looping over t then x.
@@ -87,13 +90,13 @@ def create_training_data(nx, nt):
     mask = np.ones(len(xt), dtype=bool)
     # Mask off the points at x = 0.
     mask[:nt] = False
-    # Mask off the points at x = 1.
-    mask[-nt:] = False
     # Mask off the points at t = 0.
     mask[::nt] = False
-    # Keep t = t_max inside.
-    # mask[nt_train - 1::nx_train] = False
+
+    # Extract the internal points.
     xt_in = xt[mask]
+
+    # Invert the mask and extract the boundary points.
     mask = np.logical_not(mask)
     xt_bc = xt[mask]
     return xt, xt_in, xt_bc
@@ -160,11 +163,10 @@ def compute_boundary_conditions(xt):
 # del_Y is the list of gradients [del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P]
 
 # @tf.function
-def pde_rho(xt, Y, delY):
+def pde_rho(xt, Y, del_Y):
     """Differential equation for rho.
 
-    Evaluate the differential equation for rho (density). The nominal value
-    is 0.
+    Evaluate the differential equation for rho (density).
 
     Parameters
     ----------
@@ -172,59 +174,87 @@ def pde_rho(xt, Y, delY):
         Values of (x, t) at each training point.
     Y : list of n_var tf.Tensor, each shape (n, 1)
         Values of dependent variables at each training point.
-    delY : list of n_var tf.Tensor, each shape (n, 2)
+    del_Y : list of n_var tf.Tensor, each shape (n, 2)
         Values of gradient wrt (x, t) at each training point, for each
         dependent variable.
     """
     # Each of these Tensors is shape (n, 1).
     n = xt.shape[0]
-    rho = Y[0]
-    vx = Y[2]
-    drho_dx = tf.reshape(delY[0][:, 0], (n, 1))
-    drho_dt = tf.reshape(delY[0][:, 1], (n, 1))
-    dvx_dx = tf.reshape(delY[2][:, 0], (n, 1))
+    # x = tf.reshape(xt[:, 0], (n, 1))
+    # t = tf.reshape(xt[:, 1], (n, 1))
+    (rho, P, vx, vy, vz, By, Bz) = Y
+    (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
+    # dP_dx = tf.reshape(del_P[:, 0], (n, 1))
+    dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
+    # dvy_dx = tf.reshape(del_vy[:, 0], (n, 1))
+    # dvz_dx = tf.reshape(del_vz[:, 0], (n, 1))
+    # dBy_dx = tf.reshape(del_By[:, 0], (n, 1))
+    # dBz_dx = tf.reshape(del_Bz[:, 0], (n, 1))
+    drho_dt = tf.reshape(del_rho[:, 1], (n, 1))
+    # dP_dt = tf.reshape(del_P[:, 1], (n, 1))
+    # dvx_dt = tf.reshape(del_vx[:, 1], (n, 1))
+    # dvy_dt = tf.reshape(del_vy[:, 1], (n, 1))
+    # dvz_dt = tf.reshape(del_vz[:, 1], (n, 1))
+    # dBy_dt = tf.reshape(del_By[:, 1], (n, 1))
+    # dBz_dt = tf.reshape(del_Bz[:, 1], (n, 1))
     # G is a Tensor of shape (n, 1).
     G = drho_dt + rho*dvx_dx + drho_dx*vx
     return G
 
 # @tf.function
 def pde_P(xt, Y, del_Y):
-    """Differential equation for P (actually E)."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    Bx = p.Bx_0
-    drho_dx  = del_rho[:, 0]
-    drho_dt  = del_rho[:, 1]
-    dvx_dx   =  del_vx[:, 0]
-    dvx_dt   =  del_vx[:, 1]
-    dvy_dx   =  del_vy[:, 0]
-    dvy_dt   =  del_vy[:, 1]
-    dvz_dx   =  del_vz[:, 0]
-    dvz_dt   =  del_vz[:, 1]
-    dBy_dx   =  del_By[:, 0]
-    dBy_dt   =  del_By[:, 1]
-    dBz_dx   =  del_Bz[:, 0]
-    dBz_dt   =  del_Bz[:, 1]
-    dP_dx    =   del_P[:, 0]
-    dP_dt    =   del_P[:, 1]
+    """Differential equation for P (actually E).
+
+    Evaluate the differential equation for pressure (or energy density).
+
+    Parameters
+    ----------
+    xt : tf.Variable, shape (n, 2)
+        Values of (x, t) at each training point.
+    Y : list of n_var tf.Tensor, each shape (n, 1)
+        Values of dependent variables at each training point.
+    del_Y : list of n_var tf.Tensor, each shape (n, 2)
+        Values of gradient wrt (x, t) at each training point, for each
+        dependent variable.
+    """
+    n = xt.shape[0]
+    # x = tf.reshape(xt[:, 0], (n, 1))
+    # t = tf.reshape(xt[:, 1], (n, 1))
+    (rho, P, vx, vy, vz, By, Bz) = Y
+    (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
+    dP_dx = tf.reshape(del_P[:, 0], (n, 1))
+    dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
+    dvy_dx = tf.reshape(del_vy[:, 0], (n, 1))
+    dvz_dx = tf.reshape(del_vz[:, 0], (n, 1))
+    dBy_dx = tf.reshape(del_By[:, 0], (n, 1))
+    dBz_dx = tf.reshape(del_Bz[:, 0], (n, 1))
+    drho_dt = tf.reshape(del_rho[:, 1], (n, 1))
+    dP_dt = tf.reshape(del_P[:, 1], (n, 1))
+    dvx_dt = tf.reshape(del_vx[:, 1], (n, 1))
+    dvy_dt = tf.reshape(del_vy[:, 1], (n, 1))
+    dvz_dt = tf.reshape(del_vz[:, 1], (n, 1))
+    dBy_dt = tf.reshape(del_By[:, 1], (n, 1))
+    dBz_dt = tf.reshape(del_Bz[:, 1], (n, 1))
+
+    # Compute the total pressure and x-derivative.
     Ptot = P + 0.5*(Bx**2 + By**2 + Bz**2)
     # dBx_dx and dBx_dt are 0.
     dPtot_dx = dP_dx + By*dBy_dx + Bz*dBz_dx
     E = (
-        P/(p.gamma - 1)
+        P/(gamma - 1)
         + 0.5*rho*(vx**2 + vy**2 + vz**2)
         + 0.5*(Bx**2 + By**2 + Bz**2)
     )
     dE_dx = (
-        dP_dx/(p.gamma - 1)
+        dP_dx/(gamma - 1)
         + rho*(vx*dvx_dx + vy*dvy_dx + vz*dvz_dx)
         + drho_dx*0.5*(vx**2 + vy**2  + vz**2)
         + By*dBy_dx + Bz*dBz_dx
     )
     dE_dt = (
-        dP_dt/(p.gamma - 1)
+        dP_dt/(gamma - 1)
         + rho*(vx*dvx_dt + vy*dvy_dt + vz*dvz_dt)
         + drho_dt*0.5*(vx**2 + vy**2  + vz**2)
         + By*dBy_dt + Bz*dBz_dt
@@ -237,18 +267,39 @@ def pde_P(xt, Y, del_Y):
 
 # @tf.function
 def pde_vx(xt, Y, del_Y):
-    """Differential equation for vx."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    drho_dx = del_rho[:, 0]
-    drho_dt = del_rho[:, 1]
-    dvx_dx  =  del_vx[:, 0]
-    dvx_dt  =  del_vx[:, 1]
-    dBy_dx  =  del_By[:, 0]
-    dBz_dx  =  del_Bz[:, 0]
-    dP_dx   =   del_P[:, 0]
+    """Differential equation for vx.
+
+    Evaluate the differential equation for vx.
+
+    Parameters
+    ----------
+    xt : tf.Variable, shape (n, 2)
+        Values of (x, t) at each training point.
+    Y : list of n_var tf.Tensor, each shape (n, 1)
+        Values of dependent variables at each training point.
+    del_Y : list of n_var tf.Tensor, each shape (n, 2)
+        Values of gradient wrt (x, t) at each training point, for each
+        dependent variable.
+    """
+    n = xt.shape[0]
+    # x = tf.reshape(xt[:, 0], (n, 1))
+    # t = tf.reshape(xt[:, 1], (n, 1))
+    (rho, P, vx, vy, vz, By, Bz) = Y
+    (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
+    dP_dx = tf.reshape(del_P[:, 0], (n, 1))
+    dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
+    # dvy_dx = tf.reshape(del_vy[:, 0], (n, 1))
+    # dvz_dx = tf.reshape(del_vz[:, 0], (n, 1))
+    dBy_dx = tf.reshape(del_By[:, 0], (n, 1))
+    dBz_dx = tf.reshape(del_Bz[:, 0], (n, 1))
+    drho_dt = tf.reshape(del_rho[:, 1], (n, 1))
+    # dP_dt = tf.reshape(del_P[:, 1], (n, 1))
+    dvx_dt = tf.reshape(del_vx[:, 1], (n, 1))
+    # dvy_dt = tf.reshape(del_vy[:, 1], (n, 1))
+    # dvz_dt = tf.reshape(del_vz[:, 1], (n, 1))
+    # dBy_dt = tf.reshape(del_By[:, 1], (n, 1))
+    # dBz_dt = tf.reshape(del_Bz[:, 1], (n, 1))
     # dBx_dx is 0.
     dPtot_dx = dP_dx + By*dBy_dx + Bz*dBz_dx
     G = (
@@ -259,18 +310,39 @@ def pde_vx(xt, Y, del_Y):
 
 # @tf.function
 def pde_vy(xt, Y, del_Y):
-    """Differential equation for vy."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    Bx = p.Bx_0
-    drho_dx = del_rho[:, 0]
-    drho_dt = del_rho[:, 1]
-    dvx_dx  =  del_vx[:, 0]
-    dvy_dx  =  del_vy[:, 0]
-    dvy_dt  =  del_vy[:, 1]
-    dBy_dx  =  del_By[:, 0]
+    """Differential equation for vy.
+
+    Evaluate the differential equation for vy.
+
+    Parameters
+    ----------
+    xt : tf.Variable, shape (n, 2)
+        Values of (x, t) at each training point.
+    Y : list of n_var tf.Tensor, each shape (n, 1)
+        Values of dependent variables at each training point.
+    del_Y : list of n_var tf.Tensor, each shape (n, 2)
+        Values of gradient wrt (x, t) at each training point, for each
+        dependent variable.
+    """
+    n = xt.shape[0]
+    # x = tf.reshape(xt[:, 0], (n, 1))
+    # t = tf.reshape(xt[:, 1], (n, 1))
+    (rho, P, vx, vy, vz, By, Bz) = Y
+    (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
+    # dP_dx = tf.reshape(del_P[:, 0], (n, 1))
+    dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
+    dvy_dx = tf.reshape(del_vy[:, 0], (n, 1))
+    # dvz_dx = tf.reshape(del_vz[:, 0], (n, 1))
+    dBy_dx = tf.reshape(del_By[:, 0], (n, 1))
+    # dBz_dx = tf.reshape(del_Bz[:, 0], (n, 1))
+    drho_dt = tf.reshape(del_rho[:, 1], (n, 1))
+    # dP_dt = tf.reshape(del_P[:, 1], (n, 1))
+    # dvx_dt = tf.reshape(del_vx[:, 1], (n, 1))
+    dvy_dt = tf.reshape(del_vy[:, 1], (n, 1))
+    # dvz_dt = tf.reshape(del_vz[:, 1], (n, 1))
+    dBy_dt = tf.reshape(del_By[:, 1], (n, 1))
+    # dBz_dt = tf.reshape(del_Bz[:, 1], (n, 1))
     # dBx_dx is 0.
     G = (
         rho*dvy_dt + drho_dt*vy
@@ -281,18 +353,39 @@ def pde_vy(xt, Y, del_Y):
 
 # @tf.function
 def pde_vz(xt, Y, del_Y):
-    """Differential equation for vz."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    Bx = p.Bx_0
-    drho_dx = del_rho[:, 0]
-    drho_dt = del_rho[:, 1]
-    dvx_dx  =  del_vx[:, 0]
-    dvz_dx  =  del_vz[:, 0]
-    dvz_dt  =  del_vz[:, 1]
-    dBz_dx  =  del_Bz[:, 0]
+    """Differential equation for vz.
+
+    Evaluate the differential equation for vz.
+
+    Parameters
+    ----------
+    xt : tf.Variable, shape (n, 2)
+        Values of (x, t) at each training point.
+    Y : list of n_var tf.Tensor, each shape (n, 1)
+        Values of dependent variables at each training point.
+    del_Y : list of n_var tf.Tensor, each shape (n, 2)
+        Values of gradient wrt (x, t) at each training point, for each
+        dependent variable.
+    """
+    n = xt.shape[0]
+    # x = tf.reshape(xt[:, 0], (n, 1))
+    # t = tf.reshape(xt[:, 1], (n, 1))
+    (rho, P, vx, vy, vz, By, Bz) = Y
+    (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
+    # dP_dx = tf.reshape(del_P[:, 0], (n, 1))
+    dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
+    # dvy_dx = tf.reshape(del_vy[:, 0], (n, 1))
+    dvz_dx = tf.reshape(del_vz[:, 0], (n, 1))
+    # dBy_dx = tf.reshape(del_By[:, 0], (n, 1))
+    dBz_dx = tf.reshape(del_Bz[:, 0], (n, 1))
+    drho_dt = tf.reshape(del_rho[:, 1], (n, 1))
+    # dP_dt = tf.reshape(del_P[:, 1], (n, 1))
+    dvx_dt = tf.reshape(del_vx[:, 1], (n, 1))
+    # dvy_dt = tf.reshape(del_vy[:, 1], (n, 1))
+    dvz_dt = tf.reshape(del_vz[:, 1], (n, 1))
+    # dBy_dt = tf.reshape(del_By[:, 1], (n, 1))
+    # dBz_dt = tf.reshape(del_Bz[:, 1], (n, 1))
     # dBx_dx is 0.
     G = (
         rho*dvz_dt + drho_dt*vz
@@ -303,33 +396,82 @@ def pde_vz(xt, Y, del_Y):
 
 # @tf.function
 def pde_By(xt, Y, del_Y):
-    """Differential equation for By."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    Bx = p.Bx_0
-    dvx_dx = del_vx[:, 0]
-    dvy_dx = del_vy[:, 0]
-    dBy_dx = del_By[:, 0]
-    dBy_dt = del_By[:, 1]
+    """Differential equation for By.
+
+    Evaluate the differential equation for By.
+
+    Parameters
+    ----------
+    xt : tf.Variable, shape (n, 2)
+        Values of (x, t) at each training point.
+    Y : list of n_var tf.Tensor, each shape (n, 1)
+        Values of dependent variables at each training point.
+    del_Y : list of n_var tf.Tensor, each shape (n, 2)
+        Values of gradient wrt (x, t) at each training point, for each
+        dependent variable.
+    """
+    n = xt.shape[0]
+    # x = tf.reshape(xt[:, 0], (n, 1))
+    # t = tf.reshape(xt[:, 1], (n, 1))
+    (rho, P, vx, vy, vz, By, Bz) = Y
+    (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    # drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
+    # dP_dx = tf.reshape(del_P[:, 0], (n, 1))
+    dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
+    dvy_dx = tf.reshape(del_vy[:, 0], (n, 1))
+    # dvz_dx = tf.reshape(del_vz[:, 0], (n, 1))
+    dBy_dx = tf.reshape(del_By[:, 0], (n, 1))
+    # dBz_dx = tf.reshape(del_Bz[:, 0], (n, 1))
+    # drho_dt = tf.reshape(del_rho[:, 1], (n, 1))
+    # dP_dt = tf.reshape(del_P[:, 1], (n, 1))
+    # dvx_dt = tf.reshape(del_vx[:, 1], (n, 1))
+    # dvy_dt = tf.reshape(del_vy[:, 1], (n, 1))
+    # dvz_dt = tf.reshape(del_vz[:, 1], (n, 1))
+    dBy_dt = tf.reshape(del_By[:, 1], (n, 1))
+    # dBz_dt = tf.reshape(del_Bz[:, 1], (n, 1))
     # dBx_dx is 0.
     G = dBy_dt + By*dvx_dx + dBy_dx*vx - Bx*dvy_dx
     return G
 
 # @tf.function
 def pde_Bz(xt, Y, del_Y):
-    """Differential equation for Bz."""
-    x = xt[:, 0]
-    t = xt[:, 1]
-    (rho, vx, vy, vz, By, Bz, P) = Y
-    (del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P) = del_Y
-    Bx = p.Bx_0
+    """Differential equation for Bz.
+
+    Evaluate the differential equation for Bz.
+
+    Parameters
+    ----------
+    xt : tf.Variable, shape (n, 2)
+        Values of (x, t) at each training point.
+    Y : list of n_var tf.Tensor, each shape (n, 1)
+        Values of dependent variables at each training point.
+    del_Y : list of n_var tf.Tensor, each shape (n, 2)
+        Values of gradient wrt (x, t) at each training point, for each
+        dependent variable.
+    """
+    n = xt.shape[0]
+    # x = tf.reshape(xt[:, 0], (n, 1))
+    # t = tf.reshape(xt[:, 1], (n, 1))
+    (rho, P, vx, vy, vz, By, Bz) = Y
+    (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    # drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
+    # dP_dx = tf.reshape(del_P[:, 0], (n, 1))
+    dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
+    # dvy_dx = tf.reshape(del_vy[:, 0], (n, 1))
+    # dvz_dx = tf.reshape(del_vz[:, 0], (n, 1))
+    # dBy_dx = tf.reshape(del_By[:, 0], (n, 1))
+    dBz_dx = tf.reshape(del_Bz[:, 0], (n, 1))
+    # drho_dt = tf.reshape(del_rho[:, 1], (n, 1))
+    # dP_dt = tf.reshape(del_P[:, 1], (n, 1))
+    # dvx_dt = tf.reshape(del_vx[:, 1], (n, 1))
+    # dvy_dt = tf.reshape(del_vy[:, 1], (n, 1))
+    # dvz_dt = tf.reshape(del_vz[:, 1], (n, 1))
+    # dBy_dt = tf.reshape(del_By[:, 1], (n, 1))
+    # dBz_dt = tf.reshape(del_Bz[:, 1], (n, 1))
     dvx_dx  = del_vx[:, 0]
     dvz_dx  = del_vz[:, 0]
     dBz_dx  = del_Bz[:, 0]
     dBz_dt  = del_Bz[:, 1]
-    # dBx_dx is 0.
     G = dBz_dt + Bz*dvx_dx + dBz_dx*vx - Bx*dvz_dx
     return G
 
