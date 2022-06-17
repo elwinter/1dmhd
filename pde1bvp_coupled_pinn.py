@@ -154,10 +154,13 @@ def main():
     xy_train, xy_train_in, xy_train_bc = p.create_training_data(
         nx_train, ny_train
     )
+    # Shape is (n_train, p.n_dim)
     np.savetxt(os.path.join(output_dir, "xy_train.dat"), xy_train)
     n_train = len(xy_train)
+    # Shape is (n_train_in, p.n_dim)
     np.savetxt(os.path.join(output_dir, "xy_train_in.dat"), xy_train_in)
     n_train_in = len(xy_train_in)
+    # Shape is (n_train_bc, p.n_dim)
     np.savetxt(os.path.join(output_dir, "xy_train_bc.dat"), xy_train_bc)
     n_train_bc = len(xy_train_bc)
     assert n_train == n_train_in + n_train_bc
@@ -195,12 +198,18 @@ def main():
     # Train the models.
 
     # Create history variables.
-    losses = []
-    losses_in = []
-    losses_bc = []
-    losses_model = []
+    # Loss for each model for interior points.
     losses_model_in = []
+    # Loss for each model for boundary condition points.
     losses_model_bc = []
+    # Total loss for each model.
+    losses_model = []
+    # Total loss for all models for interior points.
+    losses_in = []
+    # Total loss for all models for boundary condition points.
+    losses_bc = []
+    # Total loss for all models.
+    losses = []
 
     # Set the random number seed for reproducibility.
     tf.random.set_seed(seed)
@@ -228,59 +237,85 @@ def main():
             with tf.GradientTape(persistent=True) as tape0:
 
                 # Compute the network outputs at the interior training points.
-                N_in = [model(xy_in) for model in models]
-                # N is a list of tf.Tensor objects.
+                # N_in is a list of tf.Tensor objects.
                 # There are p.n_var Tensors in the list.
                 # Each Tensor has shape (n_train_in, 1).
+                N_in = [model(xy_in) for model in models]
 
                 # Compute the network outputs at the boundary training points.
-                N_bc = [model(xy_bc) for model in models]
-                # N is a list of tf.Tensor objects.
+                # N_bc is a list of tf.Tensor objects.
                 # There are p.n_var Tensors in the list.
                 # Each Tensor has shape (n_train_bc, 1).
+                N_bc = [model(xy_bc) for model in models]
 
             # Compute the gradients of the network outputs wrt inputs at the
             # interior training points.
-            # Shape is (n_in, p.n_var).
-            delN_in = [tape0.gradient(N, xy_in) for N in N_in]
-            # del is a list of tf.Tensor objects.
+            # delN_in is a list of tf.Tensor objects.
             # There are p.n_var Tensors in the list.
-            # Each Tensor has shape (n_train_in, 2).
+            # Each Tensor has shape (n_train_in, p.n_dim).
+            delN_in = [tape0.gradient(N, xy_in) for N in N_in]
 
             # Compute the estimates of the differential equations at the
             # interior training points.
-            # Shape is (n_in, p.n_var).
+            # G_in is a list of Tensor objects.
+            # There are p.n_var Tensors in the list.
+            # Each Tensor has shape (n_in, 1).
             G_in = [
                 pde(xy_in, N_in, delN_in) for pde in p.differential_equations
             ]
 
-            # Compute the loss functions for the interior points for each
-            # model.
+            # Compute the loss function for the interior points for each
+            # model, based on the values of the differential equations.
+            # Lm_in is a list of Tensor objects.
+            # There are p.n_var Tensors in the list.
+            # Each Tensor has shape ().
             Lm_in = [tf.math.sqrt(tf.reduce_sum(G**2)/n_train_in) for G in G_in]
+
+            # Compute the errors for the boundary points.
+            # E_bc is a list of tf.Tensor objects.
+            # There are p.n_var Tensors in the list.
+            # Each Tensor has shape (n_train_bc, 1).
+            E_bc = []
+            for i in range(p.n_var):
+                E = N_bc[i] - tf.reshape(bc0[:, i], (n_train_bc, 1))
+                E_bc.append(E)
 
             # Compute the loss functions for the boundary points for each
             # model.
-            Lm_bc = [tf.math.sqrt(tf.reduce_sum(N**2)/n_train_bc) for N in N_bc]
+            # Lm_bc is a list of Tensor objects.
+            # There are p.n_var Tensors in the list.
+            # Each Tensor has shape ().
+            Lm_bc = [tf.math.sqrt(tf.reduce_sum(E**2)/n_train_bc) for E in E_bc]
 
             # Compute the total losses for each model.
+            # Lm is a list of Tensor objects.
+            # There are p.n_var Tensors in the list.
+            # Each Tensor has shape ().
             Lm = [loss_in + loss_bc for (loss_in, loss_bc) in zip(Lm_in, Lm_bc)]
 
-            # Compute the total losses for interior points for the model
+            # Compute the total loss for interior points for the model
             # collection.
+            # Tensor shape ()
             L_in = tf.math.reduce_sum(Lm_in)
 
-            # Compute the total losses for boundary points for the model
+            # Compute the total loss for boundary points for the model
             # collection.
+            # Tensor shape ()
             L_bc = tf.math.reduce_sum(Lm_bc)
 
-            # Compute the total losses for all points for the model
+            # Compute the total loss for all points for the model
             # collection.
+            # Tensor shape ()
             L = L_in + L_bc
 
         # Save the current losses.
+        # The per-model loss histories are lists of lists of Tensors.
+        # Each sub-list has length p.n_var.
+        # Each Tensor is shape ().
         losses_model_in.append(Lm_in)
         losses_model_bc.append(Lm_bc)
         losses_model.append(Lm)
+        # The total loss histories are lists of scalars.
         losses_in.append(L_in.numpy())
         losses_bc.append(L_bc.numpy())
         losses.append(L.numpy())
@@ -293,6 +328,13 @@ def main():
                 break
 
         # Compute the gradient of the loss function wrt the network parameters.
+        # pgrad is a list of lists of Tensor objects.
+        # There are p.n_var sub-lists in the top-level list.
+        # There are 3 Tensors in each sub-list, with shapes:
+        # Input weights: (H, p.n_dim)
+        # Input biases: (H,)
+        # Output weights: (H, 1)
+        # Each Tensor is shaped based on model.trainable_variables.
         pgrad = [tape1.gradient(L, model.trainable_variables) for model in models]
 
         # Update the parameters for this epoch.
@@ -333,6 +375,18 @@ def main():
     np.savetxt(os.path.join(output_dir, 'losses_bc.dat'), np.array(losses_bc))
     np.savetxt(os.path.join(output_dir, 'losses.dat'), np.array(losses))
 
+    # Compute and save the trained results at training points.
+    n_var = len(p.variable_names)
+    if verbose:
+        print("Computing and saving trained results.")
+    with tf.GradientTape(persistent=True) as tape0:
+        N_train = [model(xy) for model in models]
+    delN_train = [tape0.gradient(N_train, xy) for N in N_train]
+    for i in range(n_var):
+        np.savetxt(os.path.join(output_dir, "%s_train.dat" % p.variable_names[i]),
+                   N_train[i].numpy().reshape(n_train,))
+        np.savetxt(os.path.join(output_dir, "del_%s_train.dat" % p.variable_names[i]),
+                  delN_train[i].numpy().reshape(n_train, 2))
 
 if __name__ == "__main__":
     """Begin main program."""

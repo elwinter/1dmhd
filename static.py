@@ -34,6 +34,9 @@ import tensorflow as tf
 # Names of dependent variables.
 variable_names = ["rho", "P", "vx", "vy", "vz", "By", "Bz"]
 
+# Number of independent variables.
+n_dim = 2
+
 # Number of dependent variables.
 n_var = len(variable_names)
 
@@ -62,6 +65,8 @@ def create_training_data(nx, nt):
     Create and return a set of training data of points evenly spaced in x and
     t. Flatten the data to a list of pairs of points. Also return copies
     of the data containing only internal points, and only boundary points.
+
+    Boundary conditions are computed for all points where at x = 0 or t = 0.
 
     Parameters
     ----------
