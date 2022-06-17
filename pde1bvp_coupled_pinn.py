@@ -195,9 +195,12 @@ def main():
     # Train the models.
 
     # Create history variables.
-    losses     = []
-    losses_in  = []
-    losses_bc  = []
+    losses = []
+    losses_in = []
+    losses_bc = []
+    losses_model = []
+    losses_model_in = []
+    losses_model_bc = []
 
     # Set the random number seed for reproducibility.
     tf.random.set_seed(seed)
@@ -252,22 +255,35 @@ def main():
             ]
 
             # Compute the loss functions for the interior points for each
-            # model. "Ls" = plural of "L"
-            Ls_in = [tf.math.sqrt(tf.reduce_sum(G**2)/n_train_in) for G in G_in]
+            # model.
+            Lm_in = [tf.math.sqrt(tf.reduce_sum(G**2)/n_train_in) for G in G_in]
 
             # Compute the loss functions for the boundary points for each
-            # model. "Ls" = plural of "L"
-            Ls_bc = [tf.math.sqrt(tf.reduce_sum(N**2)/n_train_bc) for N in N_bc]
+            # model.
+            Lm_bc = [tf.math.sqrt(tf.reduce_sum(N**2)/n_train_bc) for N in N_bc]
 
-            # Compute the total losses.
-            L_in = tf.math.reduce_sum(Ls_in)
-            L_bc = tf.math.reduce_sum(Ls_bc)
+            # Compute the total losses for each model.
+            Lm = [loss_in + loss_bc for (loss_in, loss_bc) in zip(Lm_in, Lm_bc)]
+
+            # Compute the total losses for interior points for the model
+            # collection.
+            L_in = tf.math.reduce_sum(Lm_in)
+
+            # Compute the total losses for boundary points for the model
+            # collection.
+            L_bc = tf.math.reduce_sum(Lm_bc)
+
+            # Compute the total losses for all points for the model
+            # collection.
             L = L_in + L_bc
 
         # Save the current losses.
-        losses.append(L.numpy())
+        losses_model_in.append(Lm_in)
+        losses_model_bc.append(Lm_bc)
+        losses_model.append(Lm)
         losses_in.append(L_in.numpy())
         losses_bc.append(L_bc.numpy())
+        losses.append(L.numpy())
 
         # Check for convergence.
         if epoch > 1:
@@ -285,7 +301,7 @@ def main():
 
         if verbose and epoch % 1 == 0:
             print("Ending epoch %s, loss function = %f" % (epoch, L.numpy()))
-            print("Ending epoch %s." % epoch)
+            # print("Ending epoch %s." % epoch)
 
     # Count the last epoch.
     n_epochs = epoch + 1
@@ -299,12 +315,23 @@ def main():
         # print("Final value of loss function: %f" % losses[-1])
         print("converged = %s" % converged)
 
+    # Convert the loss function histories to numpy arrays.
+    losses_model_in = np.array(losses_model_in)
+    losses_model_bc = np.array(losses_model_bc)
+    losses_model = np.array(losses_model)
+    losses_in = np.array(losses_in)
+    losses_bc = np.array(losses_bc)
+    losses = np.array(losses)
+
     # Save the loss function histories.
     if verbose:
         print("Saving loss function histories.")
-    np.savetxt(os.path.join(output_dir, 'losses.dat'), np.array(losses))
+    np.savetxt(os.path.join(output_dir, 'losses_model_in.dat'), np.array(losses_model_in))
+    np.savetxt(os.path.join(output_dir, 'losses_model_bc.dat'), np.array(losses_model_bc))
+    np.savetxt(os.path.join(output_dir, 'losses_model.dat'), np.array(losses_model))
     np.savetxt(os.path.join(output_dir, 'losses_in.dat'), np.array(losses_in))
     np.savetxt(os.path.join(output_dir, 'losses_bc.dat'), np.array(losses_bc))
+    np.savetxt(os.path.join(output_dir, 'losses.dat'), np.array(losses))
 
 
 if __name__ == "__main__":
