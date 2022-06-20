@@ -29,7 +29,7 @@ import common
 # Program constants
 
 # Program description.
-description = "Solve a set of coupled 1st-order ODE BVP with the PINN method."
+description = "Solve a set of coupled 1st-order PDE BVP using the PINN method."
 
 # Default number of training points in the y-dimension.
 default_ny_train = 11
@@ -135,8 +135,7 @@ def main():
     if debug:
         print("p = %s" % p)
 
-    # Create the output directory, named after the problem, under the current
-    # directory.
+    # Set up the output directory under the current directory.
     output_dir = os.path.join(".", problem)
     common.create_output_directory(output_dir)
 
@@ -151,6 +150,8 @@ def main():
     # Create and save the training data.
     if verbose:
         print("Creating and saving training data.")
+    # These are each 2-D NumPy arrays.
+    # Shapes are (n_train, 2), (n_train_in, 2), (n_train_bc, 2)
     xy_train, xy_train_in, xy_train_bc = p.create_training_data(
         nx_train, ny_train
     )
@@ -177,6 +178,11 @@ def main():
     bc0 = tf.Variable(bc0, dtype=precision)
     if debug:
         print("bc0 = %s" % bc0)
+
+    # Compute the normalized weight for the interior points.
+    w_in = 1.0 - w_bc
+    if debug:
+        print("w_in = %s" % w_in)
 
     # Build the models.
     if verbose:
@@ -216,10 +222,13 @@ def main():
 
     # Rename the training data Variables for convenience.
     # The 2-D NumPy arrays must be converted to TensorFlow.
+    # Shape (n_train, 2)
     xy_train_var = tf.Variable(xy_train, dtype=precision)
     xy = xy_train_var
+    # Shape (n_train_in, 2)
     xy_train_in_var = tf.Variable(xy_train_in, dtype=precision)
     xy_in = xy_train_in_var
+    # Shape (n_train_bc, 2)
     xy_train_bc_var = tf.Variable(xy_train_bc, dtype=precision)
     xy_bc = xy_train_bc_var
 
@@ -233,8 +242,10 @@ def main():
     for epoch in range(max_epochs):
 
         # Run the forward pass.
-        with tf.GradientTape(persistent=True) as tape1:
-            with tf.GradientTape(persistent=True) as tape0:
+        # tape0 is for computing gradients wrt network parameters.
+        # tape1 is for computing 1st-order derivatives of outputs wrt inputs.
+        with tf.GradientTape(persistent=True) as tape0:
+            with tf.GradientTape(persistent=True) as tape1:
 
                 # Compute the network outputs at the interior training points.
                 # N_in is a list of tf.Tensor objects.
@@ -253,7 +264,7 @@ def main():
             # delN_in is a list of tf.Tensor objects.
             # There are p.n_var Tensors in the list.
             # Each Tensor has shape (n_train_in, p.n_dim).
-            delN_in = [tape0.gradient(N, xy_in) for N in N_in]
+            delN_in = [tape1.gradient(N, xy_in) for N in N_in]
 
             # Compute the estimates of the differential equations at the
             # interior training points.
@@ -291,7 +302,7 @@ def main():
             # Lm is a list of Tensor objects.
             # There are p.n_var Tensors in the list.
             # Each Tensor has shape ().
-            Lm = [loss_in + loss_bc for (loss_in, loss_bc) in zip(Lm_in, Lm_bc)]
+            Lm = [w_in*loss_in + w_bc*loss_bc for (loss_in, loss_bc) in zip(Lm_in, Lm_bc)]
 
             # Compute the total loss for interior points for the model
             # collection.
@@ -306,7 +317,7 @@ def main():
             # Compute the total loss for all points for the model
             # collection.
             # Tensor shape ()
-            L = L_in + L_bc
+            L = w_in*L_in + w_bc*L_bc
 
         # Save the current losses.
         # The per-model loss histories are lists of lists of Tensors.
@@ -319,6 +330,14 @@ def main():
         losses_in.append(L_in.numpy())
         losses_bc.append(L_bc.numpy())
         losses.append(L.numpy())
+
+        # Save the current model weights.
+        if save_weights:
+            for (i, model) in enumerate(models):
+                model.save_weights(
+                    os.path.join(output_dir, "weights_" + p.variable_names[i],
+                                 "weights_%06d" % epoch)
+                )
 
         # Check for convergence.
         if epoch > 1:
@@ -335,15 +354,15 @@ def main():
         # Input biases: (H,)
         # Output weights: (H, 1)
         # Each Tensor is shaped based on model.trainable_variables.
-        pgrad = [tape1.gradient(L, model.trainable_variables) for model in models]
+        pgrad = [tape0.gradient(L, model.trainable_variables) for model in models]
 
         # Update the parameters for this epoch.
         for (g, m) in zip(pgrad, models):
             optimizer.apply_gradients(zip(g, m.trainable_variables))
 
         if verbose and epoch % 1 == 0:
-            print("Ending epoch %s, loss function = %f" % (epoch, L.numpy()))
-            # print("Ending epoch %s." % epoch)
+            print("Ending epoch %s, (L, L_in, L_bc) = (%f, %f, %f)" %
+                  (epoch, L.numpy(), L_in.numpy(), L_bc.numpy()))
 
     # Count the last epoch.
     n_epochs = epoch + 1
@@ -354,7 +373,7 @@ def main():
         print("Training stopped at", t_stop)
         print("Total training time was %s seconds." % t_elapsed.total_seconds())
         print("Epochs: %d" % n_epochs)
-        # print("Final value of loss function: %f" % losses[-1])
+        print("Final value of loss function: %f" % losses[-1])
         print("converged = %s" % converged)
 
     # Convert the loss function histories to numpy arrays.
@@ -368,25 +387,54 @@ def main():
     # Save the loss function histories.
     if verbose:
         print("Saving loss function histories.")
-    np.savetxt(os.path.join(output_dir, 'losses_model_in.dat'), np.array(losses_model_in))
-    np.savetxt(os.path.join(output_dir, 'losses_model_bc.dat'), np.array(losses_model_bc))
-    np.savetxt(os.path.join(output_dir, 'losses_model.dat'), np.array(losses_model))
-    np.savetxt(os.path.join(output_dir, 'losses_in.dat'), np.array(losses_in))
-    np.savetxt(os.path.join(output_dir, 'losses_bc.dat'), np.array(losses_bc))
-    np.savetxt(os.path.join(output_dir, 'losses.dat'), np.array(losses))
+    np.savetxt(os.path.join(output_dir, 'losses_model_in.dat'), losses_model_in)
+    np.savetxt(os.path.join(output_dir, 'losses_model_bc.dat'), losses_model_bc)
+    np.savetxt(os.path.join(output_dir, 'losses_model.dat'), losses_model)
+    np.savetxt(os.path.join(output_dir, 'losses_in.dat'), losses_in)
+    np.savetxt(os.path.join(output_dir, 'losses_bc.dat'), losses_bc)
+    np.savetxt(os.path.join(output_dir, 'losses.dat'), losses)
 
     # Compute and save the trained results at training points.
-    n_var = len(p.variable_names)
     if verbose:
         print("Computing and saving trained results.")
-    with tf.GradientTape(persistent=True) as tape0:
+    # Shapes are (n_train, 2), (n_train_in, 2), (n_train_bc, 2).
+    with tf.GradientTape(persistent=True) as tape1:
         N_train = [model(xy) for model in models]
-    delN_train = [tape0.gradient(N_train, xy) for N in N_train]
-    for i in range(n_var):
-        np.savetxt(os.path.join(output_dir, "%s_train.dat" % p.variable_names[i]),
-                   N_train[i].numpy().reshape(n_train,))
-        np.savetxt(os.path.join(output_dir, "del_%s_train.dat" % p.variable_names[i]),
-                  delN_train[i].numpy().reshape(n_train, 2))
+    delN_train = [tape1.gradient(N, xy) for N in N_train]
+    for i in range(p.n_var):
+        np.savetxt(os.path.join(output_dir, "%s_train.dat" %
+                   p.variable_names[i]), tf.reshape(N_train[i], (n_train,)))
+        np.savetxt(os.path.join(output_dir, "del_%s_train.dat" %
+                   p.variable_names[i]), delN_train[i])
+
+    # Compute and save the trained results at validation points.
+    if verbose:
+        print("Computing and saving validation results.")
+    # Shapes are (n_val, 2), (n_val_in, 2), (n_val_bc, 2).
+    # Shapes are (n_val, 2), (n_val_in, 2), (n_val_bc, 2).
+    xy_val, xy_val_in, xy_val_bc = p.create_training_data(nx_val, ny_val)
+    n_val = len(xy_val)
+    n_val_in = len(xy_val_in)
+    n_val_bc = len(xy_val_bc)
+    # assert n_val_bc == 2*(nx_val + ny_val - 2)
+    assert n_val_in + n_val_bc == n_val
+    np.savetxt(os.path.join(output_dir, "xy_val.dat"), xy_val)
+    np.savetxt(os.path.join(output_dir, "xy_val_in.dat"), xy_val_in)
+    np.savetxt(os.path.join(output_dir, "xy_val_bc.dat"), xy_val_bc)
+    xy_val = tf.Variable(xy_val.reshape(n_val, 2), dtype=precision)
+    with tf.GradientTape(persistent=True) as tape1:
+        N_val = [model(xy_val) for model in models]
+    delN_val = [tape1.gradient(N, xy_val) for N in N_val]
+    for i in range(p.n_var):
+        np.savetxt(os.path.join(output_dir, "%s_val.dat" %
+                   p.variable_names[i]), tf.reshape(N_val[i], (n_val,)))
+        np.savetxt(os.path.join(output_dir, "del_%s_val.dat" %
+                   p.variable_names[i]), delN_val[i])
+
+    # Save the trained models.
+    if save_model:
+        for (i, model) in enumerate(models):
+            model.save(os.path.join(output_dir, "model_" + p.variable_names[i]))
 
 if __name__ == "__main__":
     """Begin main program."""

@@ -155,10 +155,13 @@ def main():
     # These are each 2-D NumPy arrays.
     # Shapes are (n_train, 2), (n_train_in, 2), (n_train_bc, 2)
     xy_train, xy_train_in, xy_train_bc = p.create_training_data(nx_train, ny_train)
+    # Shape is (n_train, p.n_dim)
     np.savetxt(os.path.join(output_dir, "xy_train.dat"), xy_train)
     n_train = len(xy_train)
+    # Shape is (n_train_in, p.n_dim)
     np.savetxt(os.path.join(output_dir, "xy_train_in.dat"), xy_train_in)
     n_train_in = len(xy_train_in)
+    # Shape is (n_train_bc, p.n_dim)
     np.savetxt(os.path.join(output_dir, "xy_train_bc.dat"), xy_train_bc)
     n_train_bc = len(xy_train_bc)
     assert n_train_bc == 2*(nx_train + ny_train - 2)
