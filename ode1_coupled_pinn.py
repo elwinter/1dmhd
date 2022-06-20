@@ -29,7 +29,7 @@ import common
 # Program constants
 
 # Program description.
-description = "Solve 2 coupled 1st-order ODE IVP, using the PINN method."
+description = "Solve 2 coupled 1st-order ODE IVP using the PINN method."
 
 # Default problem name.
 default_problem = "lagaris04"
@@ -174,8 +174,10 @@ def main():
     for epoch in range(max_epochs):
 
         # Run the forward pass.
-        with tf.GradientTape(persistent=True) as tape1:
-            with tf.GradientTape(persistent=True) as tape0:
+        # tape0 is for computing gradients wrt network parameters.
+        # tape1 is for computing 1st-order derivatives of outputs wrt inputs.
+        with tf.GradientTape(persistent=True) as tape0:
+            with tf.GradientTape(persistent=True) as tape1:
 
                 # Compute the network outputs within the domain.
                 # Shape is (n_in, 1).
@@ -190,8 +192,8 @@ def main():
             # Compute the gradients of the network outputs wrt inputs at the
             # interior training points.
             # Shape is (n_in, 1).
-            dy1_dx_in = tape0.gradient(y1_in, x_in)
-            dy2_dx_in = tape0.gradient(y2_in, x_in)
+            dy1_dx_in = tape1.gradient(y1_in, x_in)
+            dy2_dx_in = tape1.gradient(y2_in, x_in)
 
             # Compute the estimates of the differential equations at the
             # interior training points.
@@ -265,8 +267,8 @@ def main():
         #     objects are shape (H,).
         #   * The last Tensor is for the gradient of the loss function wrt the
         #     weights of the output layer, and has shape (H, 1).
-        pgrad_y1 = tape1.gradient(L, model1.trainable_variables)
-        pgrad_y2 = tape1.gradient(L, model2.trainable_variables)
+        pgrad_y1 = tape0.gradient(L, model1.trainable_variables)
+        pgrad_y2 = tape0.gradient(L, model2.trainable_variables)
 
         # Update the parameters for this epoch.
         optimizer.apply_gradients(zip(pgrad_y1, model1.trainable_variables))
@@ -291,31 +293,31 @@ def main():
     # Save the loss function histories.
     if verbose:
         print("Saving loss function histories.")
-    np.savetxt(os.path.join(output_dir, 'losses.dat'), np.array(losses))
-    np.savetxt(os.path.join(output_dir, 'losses_1.dat'), np.array(losses_1))
-    np.savetxt(os.path.join(output_dir, 'losses_2.dat'), np.array(losses_2))
-    np.savetxt(os.path.join(output_dir, 'losses_in.dat'), np.array(losses_in))
-    np.savetxt(os.path.join(output_dir, 'losses_in_1.dat'), np.array(losses_in_1))
-    np.savetxt(os.path.join(output_dir, 'losses_in_2.dat'), np.array(losses_in_2))
-    np.savetxt(os.path.join(output_dir, 'losses_bc.dat'), np.array(losses_bc))
-    np.savetxt(os.path.join(output_dir, 'losses_bc_1.dat'), np.array(losses_bc_1))
-    np.savetxt(os.path.join(output_dir, 'losses_bc_2.dat'), np.array(losses_bc_2))
+    np.savetxt(os.path.join(output_dir, 'losses.dat'), losses)
+    np.savetxt(os.path.join(output_dir, 'losses_1.dat'), losses_1)
+    np.savetxt(os.path.join(output_dir, 'losses_2.dat'), losses_2)
+    np.savetxt(os.path.join(output_dir, 'losses_in.dat'), losses_in)
+    np.savetxt(os.path.join(output_dir, 'losses_in_1.dat'), losses_in_1)
+    np.savetxt(os.path.join(output_dir, 'losses_in_2.dat'), losses_in_2)
+    np.savetxt(os.path.join(output_dir, 'losses_bc.dat'), losses_bc)
+    np.savetxt(os.path.join(output_dir, 'losses_bc_1.dat'), losses_bc_1)
+    np.savetxt(os.path.join(output_dir, 'losses_bc_2.dat'), losses_bc_2)
 
     # Compute and save the trained results at training points.
     if verbose:
         print("Computing and saving trained results.")
-    with tf.GradientTape(persistent=True) as tape:
+    with tf.GradientTape(persistent=True) as tape1:
         # Shape (n_train, 1)
         y1_train = model1(x)
         y2_train = model2(x)
     # Shape (n_train, 1)
-    dy1_dx_train = tape.gradient(y1_train, x)
-    dy2_dx_train = tape.gradient(y2_train, x)
+    dy1_dx_train = tape1.gradient(y1_train, x)
+    dy2_dx_train = tape1.gradient(y2_train, x)
     # Reshape the 2-D Tensor objects to 1-D NumPy arrays.
-    np.savetxt(os.path.join(output_dir, "y1_train.dat"), y1_train.numpy().reshape((n_train,)))
-    np.savetxt(os.path.join(output_dir, "y2_train.dat"), y2_train.numpy().reshape((n_train,)))
-    np.savetxt(os.path.join(output_dir, "dy1_dx_train.dat"), dy1_dx_train.numpy().reshape((n_train,)))
-    np.savetxt(os.path.join(output_dir, "dy2_dx_train.dat"), dy2_dx_train.numpy().reshape((n_train,)))
+    np.savetxt(os.path.join(output_dir, "y1_train.dat"), y1_train)
+    np.savetxt(os.path.join(output_dir, "y2_train.dat"), y2_train)
+    np.savetxt(os.path.join(output_dir, "dy1_dx_train.dat"), dy1_dx_train)
+    np.savetxt(os.path.join(output_dir, "dy2_dx_train.dat"), dy2_dx_train)
 
     # Compute and save the trained results at validation points.
     if verbose:
@@ -338,10 +340,10 @@ def main():
     # Shape (n_val, 1)
     dy1_dx_val = tape.gradient(y1_val, x_val)
     dy2_dx_val = tape.gradient(y2_val, x_val)
-    np.savetxt(os.path.join(output_dir, "y1_val.dat"), y1_val.numpy().reshape((n_val,)))
-    np.savetxt(os.path.join(output_dir, "y2_val.dat"), y2_val.numpy().reshape((n_val,)))
-    np.savetxt(os.path.join(output_dir, "dy1_dx_val.dat"), dy1_dx_val.numpy().reshape((n_val,)))
-    np.savetxt(os.path.join(output_dir, "dy2_dx_val.dat"), dy2_dx_val.numpy().reshape((n_val,)))
+    np.savetxt(os.path.join(output_dir, "y1_val.dat"), y1_val)
+    np.savetxt(os.path.join(output_dir, "y2_val.dat"), y2_val)
+    np.savetxt(os.path.join(output_dir, "dy1_dx_val.dat"), dy1_dx_val)
+    np.savetxt(os.path.join(output_dir, "dy2_dx_val.dat"), dy2_dx_val)
 
     # Save the trained model.
     if save_model:

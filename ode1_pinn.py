@@ -97,7 +97,7 @@ def main():
     np.savetxt(os.path.join(output_dir, "x_train_in.dat"), x_train_in)
     n_train_in = len(x_train_in)
     np.savetxt(os.path.join(output_dir, "x_train_bc.dat"), x_train_bc)
-    n_train_bc = len(x_train_bc)  # Should be 1 for 1st-order ODE BVP.
+    n_train_bc = len(x_train_bc)
     assert n_train_bc == 1
     assert n_train == n_train_in + n_train_bc
 
@@ -143,7 +143,7 @@ def main():
     tf.random.set_seed(seed)
 
     # Rename the training data Variables for convenience.
-    # The 1-D NumPy arrays must be reshaped to shape (n_train, 1) since
+    # The 1-D NumPy arrays must be reshaped to shape (n, 1) since
     # TensorFlow needs these variables to have 2 dimensions.
     x_train_var = tf.Variable(x_train.reshape(n_train, 1), dtype=precision)
     x = x_train_var
@@ -162,28 +162,29 @@ def main():
     for epoch in range(max_epochs):
 
         # Run the forward pass.
-        with tf.GradientTape(persistent=True) as tape1:
-            with tf.GradientTape(persistent=True) as tape0:
+        # tape0 is for computing gradients wrt network parameters.
+        # tape1 is for computing 1st-order derivatives of outputs wrt inputs.
+        with tf.GradientTape(persistent=True) as tape0:
+            with tf.GradientTape(persistent=True) as tape1:
 
                 # Compute the network outputs within the domain.
                 # Shape is (n_in, 1).
                 y_in = model(x_in)
 
-                # Compute the network output on the boundary.
+                # Compute the network outputs on the boundary.
                 # Shape is (n_bc, 1) == (1, 1).
                 y_bc = model(x_bc)
 
-            # Compute the gradients of the network outputs wrt inputs at the
-            # interior training points.
+            # Compute the first derivatives at the interior training points.
             # Shape is (n_in, 1).
-            dy_dx_in = tape0.gradient(y_in, x_in)
+            dy_dx_in = tape1.gradient(y_in, x_in)
 
             # Compute the estimate of the differential equation at the
             # interior training points.
             # Shape is (n_in, 1).
             G_in = p.differential_equation(x_in, y_in, dy_dx_in)
 
-            # Compute the error in the computed boundary condition.
+            # Compute the errors in the computed boundary conditions.
             # Shape is (n_bc, 1) == (1, 1).
             E_bc = y_bc - bc
 
@@ -233,7 +234,7 @@ def main():
         #     objects are shape (H,).
         #   * The last Tensor is for the gradient of the loss function wrt the
         #     weights of the output layer, and has shape (H, 1).
-        pgrad = tape1.gradient(L, model.trainable_variables)
+        pgrad = tape0.gradient(L, model.trainable_variables)
 
         # Update the parameters for this epoch.
         optimizer.apply_gradients(zip(pgrad, model.trainable_variables))
@@ -257,21 +258,21 @@ def main():
     # Save the loss function histories.
     if verbose:
         print("Saving loss function histories.")
-    np.savetxt(os.path.join(output_dir, 'losses.dat'), np.array(losses))
-    np.savetxt(os.path.join(output_dir, 'losses_in.dat'), np.array(losses_in))
-    np.savetxt(os.path.join(output_dir, 'losses_bc.dat'), np.array(losses_bc))
+    np.savetxt(os.path.join(output_dir, 'losses.dat'), losses)
+    np.savetxt(os.path.join(output_dir, 'losses_in.dat'), losses_in)
+    np.savetxt(os.path.join(output_dir, 'losses_bc.dat'), losses_bc)
 
     # Compute and save the trained results at training points.
     if verbose:
         print("Computing and saving trained results.")
-    with tf.GradientTape(persistent=True) as tape:
+    with tf.GradientTape(persistent=True) as tape1:
         # Shape (n_train, 1)
         y_train = model(x)
     # Shape (n_train, 1)
-    dy_dx_train = tape.gradient(y_train, x)
+    dy_dx_train = tape1.gradient(y_train, x)
     # Reshape the 2-D Tensor objects to 1-D NumPy arrays.
-    np.savetxt(os.path.join(output_dir, "y_train.dat"), y_train.numpy().reshape((n_train,)))
-    np.savetxt(os.path.join(output_dir, "dy_dx_train.dat"), dy_dx_train.numpy().reshape((n_train,)))
+    np.savetxt(os.path.join(output_dir, "y_train.dat"), y_train)
+    np.savetxt(os.path.join(output_dir, "dy_dx_train.dat"), dy_dx_train)
 
     # Compute and save the trained results at validation points.
     if verbose:
@@ -288,13 +289,13 @@ def main():
     np.savetxt(os.path.join(output_dir, "x_val_bc.dat"), x_val_bc)
     # Reshape to 2-D Tensor, shape (n_val, 1).
     x_val = tf.Variable(x_val.reshape(n_val, 1), dtype=precision)
-    with tf.GradientTape(persistent=True) as tape:
+    with tf.GradientTape(persistent=True) as tape1:
         # Shape (n_val, 1)
         y_val = model(x_val)
     # Shape (n_val, 1)
-    dy_dx_val = tape.gradient(y_val, x_val)
-    np.savetxt(os.path.join(output_dir, "y_val.dat"), y_val.numpy().reshape((n_val,)))
-    np.savetxt(os.path.join(output_dir, "dy_dx_val.dat"), dy_dx_val.numpy().reshape((n_val,)))
+    dy_dx_val = tape1.gradient(y_val, x_val)
+    np.savetxt(os.path.join(output_dir, "y_val.dat"), y_val)
+    np.savetxt(os.path.join(output_dir, "dy_dx_val.dat"), dy_dx_val)
 
     # Save the trained model.
     if save_model:

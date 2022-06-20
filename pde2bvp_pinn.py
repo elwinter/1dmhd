@@ -227,7 +227,10 @@ def main():
     for epoch in range(max_epochs):
 
         # Run the forward pass.
-        with tf.GradientTape(persistent=True) as tape_param:
+        # tape0 is for computing gradients wrt network parameters.
+        # tape1 is for computing 1st-order derivatives of outputs wrt inputs.
+        # tape2 is for computing 2nd-order derivatives of outputs wrt inputs.
+        with tf.GradientTape(persistent=True) as tape0:
             with tf.GradientTape(persistent=True) as tape2:
                 with tf.GradientTape(persistent=True) as tape1:
 
@@ -309,7 +312,7 @@ def main():
         #     objects are shape (H,).
         #   * The last Tensor is for the gradient of the loss function wrt the
         #     weights of the output layer, and has shape (H, 1).
-        pgrad = tape_param.gradient(L, model.trainable_variables)
+        pgrad = tape0.gradient(L, model.trainable_variables)
 
         # Update the parameters for this epoch.
         optimizer.apply_gradients(zip(pgrad, model.trainable_variables))
@@ -354,9 +357,9 @@ def main():
     d2Y_dy2_train = tf.reshape(tf.linalg.tensor_diag_part(del2Y_jac_train[:, 1, :, 1]), (n_train, 1))
     # Shape is (n_train, 2).
     del2Y_train = tf.stack([d2Y_dx2_train[:, 0], d2Y_dy2_train[:, 0]], axis=1)
-    np.savetxt(os.path.join(output_dir, "Y_train.dat"), Y_train.numpy().reshape((n_train,)))
-    np.savetxt(os.path.join(output_dir, "delY_train.dat"), delY_train.numpy().reshape((n_train, 2)))
-    np.savetxt(os.path.join(output_dir, "del2Y_train.dat"), del2Y_train.numpy().reshape((n_train, 2)))
+    np.savetxt(os.path.join(output_dir, "Y_train.dat"), Y_train)
+    np.savetxt(os.path.join(output_dir, "delY_train.dat"), delY_train)
+    np.savetxt(os.path.join(output_dir, "del2Y_train.dat"), del2Y_train)
 
     # Compute and save the trained results at validation points.
     if verbose:
@@ -386,9 +389,9 @@ def main():
     d2Y_dy2_val = tf.reshape(tf.linalg.tensor_diag_part(del2Y_jac_val[:, 1, :, 1]), (n_val, 1))
     # Shape is (n_val, 2).
     del2Y_val = tf.stack([d2Y_dx2_val[:, 0], d2Y_dy2_val[:, 0]], axis=1)
-    np.savetxt(os.path.join(output_dir, "Y_val.dat"), Y_val.numpy().reshape((n_val,)))
-    np.savetxt(os.path.join(output_dir, "delY_val.dat"), delY_val.numpy().reshape((n_val, 2)))
-    np.savetxt(os.path.join(output_dir, "del2Y_val.dat"), del2Y_val.numpy().reshape((n_val, 2)))
+    np.savetxt(os.path.join(output_dir, "Y_val.dat"), Y_val)
+    np.savetxt(os.path.join(output_dir, "delY_val.dat"), delY_val)
+    np.savetxt(os.path.join(output_dir, "del2Y_val.dat"), del2Y_val)
 
     # Save the trained model.
     if save_model:

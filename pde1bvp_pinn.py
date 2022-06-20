@@ -149,6 +149,8 @@ def main():
     # Create and save the training data.
     if verbose:
         print("Creating and saving training data.")
+    # These are each 2-D NumPy arrays.
+    # Shapes are (n_train, 2), (n_train_in, 2), (n_train_bc, 2)
     xy_train, xy_train_in, xy_train_bc = p.create_training_data(nx_train, ny_train)
     np.savetxt(os.path.join(output_dir, "xy_train.dat"), xy_train)
     n_train = len(xy_train)
@@ -161,35 +163,52 @@ def main():
     # Compute the boundary condition values.
     if verbose:
         print("Computing boundary conditions.")
+    # This is a 1-D NumPy array, of length n_train_bc.
     bc = p.compute_boundary_conditions(xy_train_bc)
+    # Reshape to a 2-D NumPy array, shape (n_train_bc, 1).
     bc = bc.reshape((n_train_bc, 1))
+    # Convert to a Tensor, shape (n_train_bc, 1).
     bc = tf.Variable(bc, dtype=precision)
+    if debug:
+        print("bc = %s" % bc)
 
-    # Compute the weight for the interior points.
+    # Compute the normalized weight for the interior points.
     w_in = 1.0 - w_bc
+    if debug:
+        print("w_in = %s" % w_in)
 
     # Build the model.
     if verbose:
         print("Creating neural network.")
     model = common.build_model(n_layers, H, activation)
+    if debug:
+        print("model = %s" % model)
 
     # Create the optimizer.
     if verbose:
         print("Creating optimizer.")
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    if debug:
+        print("optimizer = %s" % optimizer)
 
     # Train the model.
 
     # Create history variables.
     losses = []
+    losses_in = []
+    losses_bc = []
 
     # Set the random number seed for reproducibility.
     tf.random.set_seed(seed)
 
     # Rename the training data Variables for convenience.
+    # The 2-D NumPy arrays are converted to 2-D Variables.
+    # Shape (n_train, 2)
     xy_train_var = tf.Variable(xy_train, dtype=precision)
     xy = xy_train_var
+    # Shape (n_train_in, 2)
     xy_train_in_var = tf.Variable(xy_train_in, dtype=precision)
+    # Shape (n_train_bc, 2)
     xy_in = xy_train_in_var
     xy_train_bc_var = tf.Variable(xy_train_bc, dtype=precision)
     xy_bc = xy_train_bc_var
@@ -199,42 +218,54 @@ def main():
 
     t_start = datetime.datetime.now()
     if verbose:
-        print("Training started at %s, max_epochs = %s" % (t_start, max_epochs))
+        print("Training started at %s." % t_start)
 
     for epoch in range(max_epochs):
 
         # Run the forward pass.
-        with tf.GradientTape(persistent=True) as tape_param:
+        # tape0 is for computing gradients wrt network parameters.
+        # tape1 is for computing 1st-order derivatives of outputs wrt inputs.
+        with tf.GradientTape(persistent=True) as tape0:
             with tf.GradientTape(persistent=True) as tape1:
 
                 # Compute the network outputs within the domain.
+                # Shape is (n_in, 2)
                 Y_in = model(xy_in)
 
                 # Compute the network outputs on the boundaries.
+                # Shape is (n_bc, 2)
                 Y_bc = model(xy_bc)
 
             # Compute the first derivatives at the interior training
             # points.
+            # Shape is (n_in, 2).
             delY_in = tape1.gradient(Y_in, xy_in)
 
             # Compute the estimate of the differential equation at the interior
             # training points.
+            # Shape is (n_in, 1).
             G_in = p.differential_equation(xy_in, Y_in, delY_in)
 
             # Compute the errors in the computed boundary conditions.
+            # Shape is (n_bc, 1).
             E_bc = Y_bc - bc
 
             # Compute the loss function for the interior training points.
+            # Shape is () (scalar).
             L_in = tf.math.sqrt(tf.reduce_sum(G_in**2)/n_train_in)
 
             # Compute the loss function for the boundary points.
+            # Shape is () (scalar).
             L_bc = tf.math.sqrt(tf.reduce_sum(E_bc**2)/n_train_bc)
 
             # Compute the weighted total loss function.
+            # Shape is () (scalar).
             L = w_in*L_in + w_bc*L_bc
 
-        # Save the current loss.
+        # Save the current losses.
         losses.append(L.numpy())
+        losses_in.append(L_in.numpy())
+        losses_bc.append(L_bc.numpy())
 
         # Save the current model weights.
         if save_weights:
@@ -248,8 +279,25 @@ def main():
                     converged = True
                     break
 
+
         # Compute the gradient of the loss function wrt the network parameters.
-        pgrad = tape_param.gradient(L, model.trainable_variables)
+        # The gradient object is a list of 3 or more Tensor objects. The shapes
+        # of these Tensor objects are the same as the shapes of the elements of
+        # the model.trainable_variables. More specifically:
+        #   * The first Tensor is for the gradient of the loss function wrt the
+        #     weights of the first hidden layer, and has shape (2, H).
+        #   * The second Tensor is for the gradient of the loss function wrt
+        #     the biases of the first hidden layer, and has shape (H,).
+        #   * If n_layers > 1, each subsequent pair of Tensor objects
+        #     represents the gradients of the loss function with respect to the
+        #     weights and biases of the next hidden layer, with layer index
+        #     increasing from the first hidden layer above the input layer, to
+        #     the last hidden layer below the output layer. The weight gradient
+        #     Tensor objects are shape (H, H), and the bias gradient Tensor
+        #     objects are shape (H,).
+        #   * The last Tensor is for the gradient of the loss function wrt the
+        #     weights of the output layer, and has shape (H, 1).
+        pgrad = tape0.gradient(L, model.trainable_variables)
 
         # Update the parameters for this epoch.
         optimizer.apply_gradients(zip(pgrad, model.trainable_variables))
@@ -269,17 +317,23 @@ def main():
         print("Final value of loss function: %f" % losses[-1])
         print("converged = %s" % converged)
 
-    # Save the loss function history.
+    # Save the loss function histories.
     if verbose:
-        print("Saving loss function history.")
-    np.savetxt(os.path.join(output_dir, 'losses.dat'),     np.array(losses))
+        print("Saving loss function histories.")
+    np.savetxt(os.path.join(output_dir, 'losses.dat'), losses)
+    np.savetxt(os.path.join(output_dir, 'losses_in.dat'), losses_in)
+    np.savetxt(os.path.join(output_dir, 'losses_bc.dat'), losses_bc)
 
     # Compute and save the trained results at training points.
     if verbose:
         print("Computing and saving trained results.")
-    # with tf.GradientTape(persistent=True) as tape:
-    Y_train = model(xy)
-    np.savetxt(os.path.join(output_dir, "Y_train.dat"), Y_train.numpy().reshape((n_train,)))
+    with tf.GradientTape(persistent=True) as tape1:
+        # Shape is (n_train, 1).
+        Y_train = model(xy)
+    # Shape (n_train, 2)
+    delY_train = tape1.gradient(Y_train, xy)
+    np.savetxt(os.path.join(output_dir, "Y_train.dat"), Y_train)
+    np.savetxt(os.path.join(output_dir, "delY_train.dat"), delY_train)
 
     # Compute and save the trained results at validation points.
     if verbose:
@@ -293,9 +347,13 @@ def main():
     np.savetxt(os.path.join(output_dir, "xy_val_in.dat"), xy_val_in)
     np.savetxt(os.path.join(output_dir, "xy_val_bc.dat"), xy_val_bc)
     xy_val = tf.Variable(xy_val.reshape(n_val, 2), dtype=precision)
-    # with tf.GradientTape(persistent=True) as tape:
-    Y_val = model(xy_val)
-    np.savetxt(os.path.join(output_dir, "Y_val.dat"), Y_val.numpy().reshape((n_val,)))
+    with tf.GradientTape(persistent=True) as tape1:
+        # Shape is (n_train, 1).
+        Y_val = model(xy_val)
+    # Shape (n_val, 2)
+    delY_val = tape1.gradient(Y_val, xy_val)
+    np.savetxt(os.path.join(output_dir, "Y_val.dat"), Y_val)
+    np.savetxt(os.path.join(output_dir, "delY_val.dat"), delY_val)
 
     # Save the trained model.
     if save_model:
