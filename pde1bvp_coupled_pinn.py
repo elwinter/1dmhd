@@ -166,7 +166,7 @@ def main():
     n_train_bc = len(xy_train_bc)
     assert n_train == n_train_in + n_train_bc
 
-    # Compute the boundary condition values.
+    # Compute the boundary condition values in normalized dimensionless form.
     if verbose:
         print("Computing boundary conditions.")
     # This is a pair of 1-D NumPy arrays.
@@ -340,11 +340,12 @@ def main():
                 )
 
         # Check for convergence.
-        if epoch > 1:
-            loss_delta = losses[-1] - losses[-2]
-            if abs(loss_delta) <= tol:
-                converged = True
-                break
+        if convcheck:
+            if epoch > 1:
+                loss_delta = losses[-1] - losses[-2]
+                if abs(loss_delta) <= tol:
+                    converged = True
+                    break
 
         # Compute the gradient of the loss function wrt the network parameters.
         # pgrad is a list of lists of Tensor objects.
