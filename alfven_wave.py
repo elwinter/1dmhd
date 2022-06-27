@@ -42,33 +42,53 @@ n_var = len(variable_names)
 
 # Define the problem domain.
 x0 = 0.0
-x1 = 1.0
+x1 = 3.0
 t0 = 0.0
 t1 = 1.0
 
 # Adiabatic index.
 gamma = 1.4
 
-# Strength of axial magnetic field.
+# Strength of axial magnetic field (physical units).
 Bx = 1.0
 
-# Ambient density at start
+# Ambient density at start (physical units).
 rho0 = 1
 
-# Ambient pressure at start
+# Ambient pressure at start (physical units).
 P0 = 1e-9
 
-# Magnitude of vy pulse at t = 0.
+# Initial value of vx (physical units).
+vx0 = 0.0
+
+# Initial value of vy at x > 0 (physical units).
+vy0 = 0.0
+
+# Magnitude of vy pulse at t = 0 (physical units).
 dvy0 = 1e-3
 
-# Conditions at (x, t) = (0, t)
-bc0t = [rho0, P0, 0.0, dvy0, 0.0, 0.0, 0.0]
+# Initial value of vz (physical units).
+vz0 = 0.0
 
-# Conditions at (x, t) = (0, t>0)
-# bc0t = [rho0, P0, 0.0, 0.0, 0.0, 0.0, 0.0]
+# Initial value of By (physical units).
+By0 = 0.0
+
+# Initial value of Bz (physical units).
+Bz0 = 0.0
+
+# Conditions at (x, t) = (0, t)
+bc0t = [rho0, P0, vx0, dvy0, vz0, By0, Bz0]
 
 # Conditions at (x, t) = (x>0, 0)
-bcx0 = [rho0, P0, 0.0, 0.0, 0.0, 0.0, 0.0]
+bcx0 = [rho0, P0, vx0, vy0, vz0, By0, Bz0]
+
+# Scale factors are needed to normalize physical quantities to a 0-1 range,
+# which is required for a stable solution. Computations in this module are
+# done in physical units, and are scaled to dimensionless units when passed
+# back to the network.
+
+# Scale factors for each dependent variable.
+s = np.array([1.0, 1.0e-9, 1.0e-3, 1.0e-3, 1.0e-3, 1.0, 1.0])
 
 
 def create_training_data(nx, nt):
@@ -134,13 +154,15 @@ def compute_boundary_conditions(xt):
     """
     n = len(xt)
     bc = np.empty((n, n_var))
-    for (i, (xx, tt)) in enumerate(xt):
-        if np.isclose(xx, x0):
-            bc[i, :] = bc0t[:]
-        elif np.isclose(tt, t0):
-            bc[i, :] = bcx0[:]
+    for (i, (x, t)) in enumerate(xt):
+        if np.isclose(x, x0):
+            bc[i, :] = bc0t
+        elif np.isclose(t, t0):
+            bc[i, :] = bcx0
         else:
             raise ValueError
+        # Normalize the BC for use by the neural network.
+        bc[i, :] = bc[i, :]/s
     return bc
 
 
@@ -175,7 +197,12 @@ def compute_boundary_conditions(xt):
 
 # xt is the tf.Variable [x, t] of all of the training points.
 # Y is the list of tf.Variable [rho, vx, vy, vz, By, Bz, P]
-# del_Y is the list of gradients [del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P]
+# del_Y is the list of gradients
+# [del_rho, del_vx, del_vy, del_vz, del_By, del_Bz, del_P]
+
+# NOTE: These equations are computed in physical units. All values passed in
+# from the network must be converted from normalized dimensionless units to
+# physical units.
 
 # @tf.function
 def pde_rho(xt, Y, del_Y):
@@ -188,10 +215,10 @@ def pde_rho(xt, Y, del_Y):
     xt : tf.Variable, shape (n, 2)
         Values of (x, t) at each training point.
     Y : list of n_var tf.Tensor, each shape (n, 1)
-        Values of dependent variables at each training point.
+        Values of dependent variables at each training point (normalized).
     del_Y : list of n_var tf.Tensor, each shape (n, 2)
-        Values of gradient wrt (x, t) at each training point, for each
-        dependent variable.
+        Values of gradient wrt (x, t) at each training point (normalized),
+        for each dependent variable.
     """
     # Each of these Tensors is shape (n, 1).
     n = xt.shape[0]
@@ -199,6 +226,20 @@ def pde_rho(xt, Y, del_Y):
     # t = tf.reshape(xt[:, 1], (n, 1))
     (rho, P, vx, vy, vz, By, Bz) = Y
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    rho = rho*s[0]
+    P = P*s[1]
+    vx = vx*s[2]
+    vy = vy*s[3]
+    vz = vz*s[4]
+    By = By*s[5]
+    Bz = Bz*s[6]
+    del_rho = del_rho*s[0]
+    delP = del_P*s[1]
+    del_vx = del_vx*s[2]
+    del_vy = del_vy*s[3]
+    del_vz = del_vz*s[4]
+    del_By = del_By*s[5]
+    del_Bz = del_Bz*s[6]
     drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
     # dP_dx = tf.reshape(del_P[:, 0], (n, 1))
     dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
@@ -237,7 +278,28 @@ def pde_P(xt, Y, del_Y):
     # x = tf.reshape(xt[:, 0], (n, 1))
     # t = tf.reshape(xt[:, 1], (n, 1))
     (rho, P, vx, vy, vz, By, Bz) = Y
+    rho = rho*s[0]
+    P = P*s[1]
+    vx = vx*s[2]
+    vy = vy*s[3]
+    vz = vz*s[4]
+    By = By*s[5]
+    Bz = Bz*s[6]
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    rho = rho*s[0]
+    P = P*s[1]
+    vx = vx*s[2]
+    vy = vy*s[3]
+    vz = vz*s[4]
+    By = By*s[5]
+    Bz = Bz*s[6]
+    del_rho = del_rho*s[0]
+    delP = del_P*s[1]
+    del_vx = del_vx*s[2]
+    del_vy = del_vy*s[3]
+    del_vz = del_vz*s[4]
+    del_By = del_By*s[5]
+    del_Bz = del_Bz*s[6]
     drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
     dP_dx = tf.reshape(del_P[:, 0], (n, 1))
     dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
@@ -265,7 +327,7 @@ def pde_P(xt, Y, del_Y):
     dE_dx = (
         dP_dx/(gamma - 1)
         + rho*(vx*dvx_dx + vy*dvy_dx + vz*dvz_dx)
-        + drho_dx*0.5*(vx**2 + vy**2  + vz**2)
+        + drho_dx*0.5*(vx**2 + vy**2 + vz**2)
         + By*dBy_dx + Bz*dBz_dx
     )
     dE_dt = (
@@ -301,6 +363,20 @@ def pde_vx(xt, Y, del_Y):
     # t = tf.reshape(xt[:, 1], (n, 1))
     (rho, P, vx, vy, vz, By, Bz) = Y
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    rho = rho*s[0]
+    P = P*s[1]
+    vx = vx*s[2]
+    vy = vy*s[3]
+    vz = vz*s[4]
+    By = By*s[5]
+    Bz = Bz*s[6]
+    del_rho = del_rho*s[0]
+    delP = del_P*s[1]
+    del_vx = del_vx*s[2]
+    del_vy = del_vy*s[3]
+    del_vz = del_vz*s[4]
+    del_By = del_By*s[5]
+    del_Bz = del_Bz*s[6]
     drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
     dP_dx = tf.reshape(del_P[:, 0], (n, 1))
     dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
@@ -344,6 +420,20 @@ def pde_vy(xt, Y, del_Y):
     # t = tf.reshape(xt[:, 1], (n, 1))
     (rho, P, vx, vy, vz, By, Bz) = Y
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    rho = rho*s[0]
+    P = P*s[1]
+    vx = vx*s[2]
+    vy = vy*s[3]
+    vz = vz*s[4]
+    By = By*s[5]
+    Bz = Bz*s[6]
+    del_rho = del_rho*s[0]
+    delP = del_P*s[1]
+    del_vx = del_vx*s[2]
+    del_vy = del_vy*s[3]
+    del_vz = del_vz*s[4]
+    del_By = del_By*s[5]
+    del_Bz = del_Bz*s[6]
     drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
     # dP_dx = tf.reshape(del_P[:, 0], (n, 1))
     dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
@@ -387,6 +477,20 @@ def pde_vz(xt, Y, del_Y):
     # t = tf.reshape(xt[:, 1], (n, 1))
     (rho, P, vx, vy, vz, By, Bz) = Y
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    rho = rho*s[0]
+    P = P*s[1]
+    vx = vx*s[2]
+    vy = vy*s[3]
+    vz = vz*s[4]
+    By = By*s[5]
+    Bz = Bz*s[6]
+    del_rho = del_rho*s[0]
+    delP = del_P*s[1]
+    del_vx = del_vx*s[2]
+    del_vy = del_vy*s[3]
+    del_vz = del_vz*s[4]
+    del_By = del_By*s[5]
+    del_Bz = del_Bz*s[6]
     drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
     # dP_dx = tf.reshape(del_P[:, 0], (n, 1))
     dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
@@ -430,6 +534,20 @@ def pde_By(xt, Y, del_Y):
     # t = tf.reshape(xt[:, 1], (n, 1))
     (rho, P, vx, vy, vz, By, Bz) = Y
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    rho = rho*s[0]
+    P = P*s[1]
+    vx = vx*s[2]
+    vy = vy*s[3]
+    vz = vz*s[4]
+    By = By*s[5]
+    Bz = Bz*s[6]
+    del_rho = del_rho*s[0]
+    delP = del_P*s[1]
+    del_vx = del_vx*s[2]
+    del_vy = del_vy*s[3]
+    del_vz = del_vz*s[4]
+    del_By = del_By*s[5]
+    del_Bz = del_Bz*s[6]
     # drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
     # dP_dx = tf.reshape(del_P[:, 0], (n, 1))
     dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
@@ -469,6 +587,20 @@ def pde_Bz(xt, Y, del_Y):
     # t = tf.reshape(xt[:, 1], (n, 1))
     (rho, P, vx, vy, vz, By, Bz) = Y
     (del_rho, del_P, del_vx, del_vy, del_vz, del_By, del_Bz) = del_Y
+    rho = rho*s[0]
+    P = P*s[1]
+    vx = vx*s[2]
+    vy = vy*s[3]
+    vz = vz*s[4]
+    By = By*s[5]
+    Bz = Bz*s[6]
+    del_rho = del_rho*s[0]
+    delP = del_P*s[1]
+    del_vx = del_vx*s[2]
+    del_vy = del_vy*s[3]
+    del_vz = del_vz*s[4]
+    del_By = del_By*s[5]
+    del_Bz = del_Bz*s[6]
     # drho_dx = tf.reshape(del_rho[:, 0], (n, 1))
     # dP_dx = tf.reshape(del_P[:, 0], (n, 1))
     dvx_dx = tf.reshape(del_vx[:, 0], (n, 1))
