@@ -22,8 +22,6 @@ variables:
 5: Bz   # z-xomponent of magnetic field
 6: E    # Total energy density
 
-The Bx is assumed to be fixed.
-
 These equations are based on the notes of Jorge Balbas (2020), from
 California State University, Northridge.
 
@@ -544,7 +542,7 @@ def pde_By(xt, Y, del_Y):
     # G is a Tensor of shape (n, 1).
     G = (
         dBy_dt
-        + (By*dpx_dx+dBy_dx*px - Bx0*dpy_dx)/rho
+        + (By*dpx_dx + dBy_dx*px - Bx0*dpy_dx)/rho
         - (By*px - Bx0*py)/rho**2*drho_dx
     )
     return G
@@ -659,7 +657,7 @@ def pde_E(xt, Y, del_Y):
         + (E + Ptot)*(-px/rho**2*drho_dx + dpx_dx/rho)
         + (dE_dx + dPtot_dx)*px/rho
         - ((Bx0*px +By*py + Bz*pz)*(-Bx0/rho**2*drho_dx)
-           + (Bx0*dpx_dx + By*dpy_dx+dBy_dx*py + Bz*dpz_dx
+           + (Bx0*dpx_dx + By*dpy_dx + dBy_dx*py + Bz*dpz_dx
               + dBz_dx*pz)*Bx0/rho)
     )
     return G
