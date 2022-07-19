@@ -12,8 +12,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--debug", "--verbose", "--no-convcheck", "--n_layers", "1", "--n_hid", "100", "--max_epochs", "1000", "--w_bc", "0.9", "--nx_train", "11", "--ny_train", "101", "--problem", "slow_wave"]
-            // "args": []
+            "args": ["--debug", "--verbose", "--no-convcheck", "--n_layers", "1", "--n_hid", "10", "--max_epochs", "1000", "--w_bc", "0.2", "--nx_train", "11", "--ny_train", "11", "--problem", "alfven_wave2"]
         }
     ]
 }

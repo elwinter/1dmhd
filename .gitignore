@@ -133,6 +133,7 @@ dmypy.json
 
 # Test outputs
 alfven_wave/
+alfven_wave2/
 cosine/
 cubic/
 exponential/
