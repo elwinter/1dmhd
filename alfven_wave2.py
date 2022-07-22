@@ -1,11 +1,11 @@
 """Problem definition file for a simple 1-D MHD problem.
 
 This problem definition file describes an Alfven situation: unit pressure and
-density, constant axial magnetic field, small velocity perturbation at
-(x, t) = (0, 0).
+density, constant axial magnetic field, small vy/By perturbation at
+(x, t) = (x, 0).
 
-The problem is defined on the domain 0 <= (x, t) <= 1. Velocity and magnetic
-field are initially 0. Bx is fixed at a constant value.
+The problem is defined on the domain 0 <= (x, t) <= 1.
+Bx is fixed at a constant value.
 
 The functions in this module are defined using a combination of Numpy and
 TensorFlow operations, so they can be used efficiently by 1dmhd.py.

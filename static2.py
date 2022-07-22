@@ -22,6 +22,8 @@ variables:
 5: Bz   # z-xomponent of magnetic field
 6: E    # Total energy density
 
+Bx is constant.
+
 These equations are based on the notes of Jorge Balbas (2020), from
 California State University, Northridge.
 
@@ -71,65 +73,12 @@ Bx0 = 0.0
 By0 = 0.0
 Bz0 = 0.0
 
-# Ambient pressure at t = 0, for all x.
-P0 = 1.0
+# Energy density at t = 0, for all x.
+E0 = 1.0
 
-
-#=====
-# Definition needed here to compute E0.
-def total_energy_density(P, rho, px, py, pz, Bx, By, Bz):
-    """Compute the total energy density.
-
-    Compute the total energy density.
-
-    Parameters
-    ----------
-    P : np.ndarray of float, shape (n,)
-        Values for the thermal pressure.
-    rho : np.ndarray of float, shape (n,)
-        Values for the mass density.
-    px : np.ndarray of float, shape (n,)
-        Values for the y-component of the momentum density.
-    py : np.ndarray of float, shape (n,)
-        Values for the z-component of the momentum density.
-    pz : np.ndarray of float, shape (n,)
-        Values for the x-component of the momentum density.
-    Bx : np.ndarray of float, shape (n,)
-        Values for the x-component of the magnetic field.
-    By : np.ndarray of float, shape (n,)
-        Values for the y-component of the magnetic field.
-    Bz : np.ndarray of float, shape (n,)
-        Values for the z-component of the magnetic field.
-
-    Returns
-    -------
-    E : np.ndarray of float, shape (n,)
-        Values for thermal pressure.
-    """
-    E = (
-        P/(gamma - 1)
-        + 0.5*(px**2 + py**2 + pz**2)/rho
-        + 0.5*(Bx**2 + By**2 + Bz**2)
-    )
-    return E
-#=====
-
-# Total energy density at t = 0, for all x.
-E0 = total_energy_density(P0, rho0, px0, py0, pz0, Bx0, By0, Bz0)
-
-# Conditions at (x, t) = (0, t)
-bc0t = [rho0, px0, py0, pz0, By0, Bz0, E0]
 
 # Conditions at (x, t) = (x>0, 0)
 bcx0 = [rho0, px0, py0, pz0, By0, Bz0, E0]
-
-# Scale factors are needed to normalize physical quantities to a 0-1 range,
-# which is required for a stable solution. Computations in this module are
-# done in physical units, and are scaled to dimensionless units when passed
-# back to the network.
-
-# Scale factors for each dependent variable.
-# s = np.array([1.0, 1.0e-9, 1.0e-3, 1.0e-3, 1.0e-3, 1.0, 1.0])
 
 
 def total_pressure(P, Bx, By, Bz):
@@ -229,7 +178,7 @@ def create_training_data(nx, nt):
     # Initialize the mask to keep everything.
     mask = np.ones(len(xt), dtype=bool)
     # Mask off the points at x = 0.
-    mask[:nt] = False
+    # mask[:nt] = False
     # Mask off the points at t = 0.
     mask[::nt] = False
 
@@ -258,10 +207,16 @@ def compute_boundary_conditions(xt):
     n = len(xt)
     bc = np.empty((n, n_var))
     for (i, (x, t)) in enumerate(xt):
-        if np.isclose(x, x0):
-            bc[i, :] = bc0t
-        elif np.isclose(t, t0):
+        # if np.isclose(x, x0):
+            # bc[i, :] = bc0t
+            # pass
+        # elif np.isclose(t, t0):
+        if np.isclose(t, t0):
             bc[i, :] = bcx0
+            # py(t=0): 1 sine wave cycle
+            # bc[i, 2] = 0.1*np.sin(2*np.pi*(x - x0)/(x1 - x0))
+            # By(t=0): negation of py(t=0)
+            # bc[i, 5] = -bc[i, 2]
         else:
             raise ValueError
     return bc
@@ -285,7 +240,7 @@ def compute_boundary_conditions(xt):
 #          |  (Bz*px - Bx*pz)/rho               |
 #           \ (E + Ptot)*px/rho - Bx*(B dot v) /
 
-#     Ptot = P + B**2/2
+#     Ptot = P + 0.5*B**2
 
 #     P = (gamma - 1)*(
 #             E - 0.5*(px**2 + py**2 + pz**2)/rho
@@ -594,7 +549,7 @@ def pde_Bz(xt, Y, del_Y):
     # G is a Tensor of shape (n, 1).
     G = (
         dBz_dt
-        + (Bz*dpx_dx+dBz_dx*px - Bx0*dpz_dx)/rho
+        + (Bz*dpx_dx + dBz_dx*px - Bx0*dpz_dx)/rho
         - (Bz*px - Bx0*pz)/rho**2*drho_dx
     )
     return G
