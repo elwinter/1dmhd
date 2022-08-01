@@ -87,8 +87,14 @@ C_alfven = np.sqrt(gamma*P0/rho0)
 # Wavelength of initial perturbation.
 wavelength = 1.0
 
+# Wavenumber of initial perturbation.
+kx = 2*np.pi/wavelength
+
 # Frequency of initial perturbation.
 f = C_alfven/wavelength
+
+# Angular frequency of initial perturbation.
+omega = 2*np.pi*f
 
 
 def create_training_data(nx, nt):
@@ -158,18 +164,18 @@ def compute_boundary_conditions(xt):
             bc[i, :] = [
                 rho10,
                 v1x0,
-                0.1*np.sin(2*np.pi*(-f*t)),
+                0.1*np.sin(-omega*(t - t0)),
                 v1z0,
-                0.1*np.sin(2*np.pi*(-f*t) - np.pi),
+                0.1*np.sin(-omega*(t - t0) - np.pi),
                 B1z0
             ]
         elif np.isclose(t, t0):
             bc[i, :] = [
                 rho10,
                 v1x0,
-                0.1*np.sin(2*np.pi*(x - x0)/wavelength),
+                0.1*np.sin(kx*(x - x0)),
                 v1z0,
-                0.1*np.sin(2*np.pi*(x - x0/wavelength) + np.pi),
+                0.1*np.sin(kx*(x - x0) + np.pi),
                 B1z0
             ]
         else:
