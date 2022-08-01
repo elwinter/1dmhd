@@ -134,6 +134,7 @@ dmypy.json
 # Test outputs
 alfven_wave/
 alfven_wave2/
+alfven_wave3/
 cosine/
 cubic/
 exponential/
@@ -153,4 +154,5 @@ sine/
 slow_wave/
 static/
 static2/
+static3/
 transport/
