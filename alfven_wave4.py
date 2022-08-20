@@ -4,7 +4,8 @@ This problem definition file describes an Alfven wave: unit pressure and
 density, with a constant axial magnetic field (B0x = constant).
 
 The problem is defined on the domain 0 <= (x, t) <= 1. Velocity is initially
-0. The converged solution should show wave propagation.
+0. The converged solution should show wave propagation. This version uses
+periodic boundary conditions in x.
 
 The functions in this module are defined using a combination of Numpy and
 TensorFlow operations, so they can be used efficiently by the TensorFlow
@@ -38,6 +39,7 @@ import tensorflow as tf
 
 # Names of dependent variables.
 variable_names = ["rho1", "v1x", "v1y", "v1z", "B1y", "B1z"]
+# variable_names = ["v1y", "B1y"]
 
 # Number of dependent variables.
 n_var = len(variable_names)
@@ -82,13 +84,19 @@ B1z0 = 0.0
 P0 = 1.0
 
 # Alfven speed.
-C_alfven = np.sqrt(gamma*P0/rho0)
+C_alfven = B0x/np.sqrt(rho0)
 
-# Wavelength of initial perturbation.
+# Wavelength and wavenumber of initial perturbation.
 wavelength = 1.0
+kx = 2*np.pi/wavelength
 
-# Frequency of initial perturbation.
+# Frequency and angular frequency of initial perturbation.
 f = C_alfven/wavelength
+w = 2*np.pi*f
+
+# Amplitude of initial perturbations in vy and By.
+a_vy = 0.1
+a_By = 0.1
 
 
 def create_training_data(nx, nt):
@@ -107,9 +115,9 @@ def create_training_data(nx, nt):
     -------
     xt : np.ndarray, shape (nx*nt, 2)
         Array of all [x, t] points.
-    xt_in : np.ndarray, shape ((nx - 1)*(nt - 1)), 2)
+    xt_in : np.ndarray, shape ((nx - 1)*(nt - 2)), 2)
         Array of all [x, t] points within boundary.
-    xt_bc : np.ndarray, shape (nx + nt - 1, 2)
+    xt_bc : np.ndarray, shape (nx + 2*(nt - 1), 2)
         Array of all [x, t] points at boundary.
     """
     # Create the array of all training points (x, t), looping over t then x.
@@ -125,6 +133,8 @@ def create_training_data(nx, nt):
     mask = np.ones(len(xt), dtype=bool)
     # Mask off the points at x = 0.
     mask[:nt] = False
+    # Mask off the points at x = 1.
+    mask[-nt:] = False
     # Mask off the points at t = 0.
     mask[::nt] = False
 
@@ -158,18 +168,28 @@ def compute_boundary_conditions(xt):
             bc[i, :] = [
                 rho10,
                 v1x0,
-                0.1*np.sin(2*np.pi*(-f*t)),
+                a_vy*np.sin(-w*t),
                 v1z0,
-                0.1*np.sin(2*np.pi*(-f*t) - np.pi),
+                a_By*np.sin(-w*t - np.pi),
+                B1z0
+            ]
+        elif np.isclose(x, x1):
+            # Periodic perturbation at x = 1, same as at x = 0.
+            bc[i, :] = [
+                rho10,
+                v1x0,
+                a_vy*np.sin(-w*t),
+                v1z0,
+                a_By*np.sin(-w*t - np.pi),
                 B1z0
             ]
         elif np.isclose(t, t0):
             bc[i, :] = [
                 rho10,
                 v1x0,
-                0.1*np.sin(2*np.pi*(x - x0)/wavelength),
+                a_vy*np.sin(kx*x),
                 v1z0,
-                0.1*np.sin(2*np.pi*(x - x0/wavelength) + np.pi),
+                a_By*np.sin(kx*x + np.pi),
                 B1z0
             ]
         else:
@@ -298,6 +318,7 @@ def pde_v1y(xt, Y1, del_Y1):
     # t = tf.reshape(xt[:, 1], (n, 1))
     # (rho1, v1x, v1y, v1z, B1y, B1z) = Y1
     (del_rho1, del_v1x, del_v1y, del_v1z, del_B1y, del_B1z) = del_Y1
+#    (del_v1y, del_B1y) = del_Y1
     # drho1_dx = tf.reshape(del_rho1[:, 0], (n, 1))
     # drho1_dt = tf.reshape(del_rho1[:, 1], (n, 1))
     # dv1x_dx = tf.reshape(del_v1x[:, 0], (n, 1))
@@ -388,6 +409,7 @@ def pde_B1y(xt, Y1, del_Y1):
     # t = tf.reshape(xt[:, 1], (n, 1))
     # (rho1, v1x, v1y, v1z, B1y, B1z) = Y1
     (del_rho1, del_v1x, del_v1y, del_v1z, del_B1y, del_B1z) = del_Y1
+#    (del_v1y, del_B1y) = del_Y1
     # drho1_dx = tf.reshape(del_rho1[:, 0], (n, 1))
     # drho1_dt = tf.reshape(del_rho1[:, 1], (n, 1))
     # dv1x_dx = tf.reshape(del_v1x[:, 0], (n, 1))
