@@ -94,8 +94,8 @@ def create_command_line_argument_parser(description, default_problem):
     """
     parser = argparse.ArgumentParser(description)
     parser.add_argument(
-        "-a", "--activation", type=str, default=default_activation,
-        help="Print debugging output (default: %(default)s)."
+        "-a", "--activation", default=default_activation,
+        help="Specify activation function (default: %(default)s)."
     )
     parser.add_argument(
         "--convcheck", action="store_true",
