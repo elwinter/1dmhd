@@ -12,7 +12,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--debug", "--verbose", "--no-convcheck", "--no-save_model",  "--n_layers", "3", "--n_hid", "100", "--max_epochs", "1000", "--w_bc", "0.95", "--nx_train", "101", "--ny_train", "101", "--problem", "alfven_wave3"]
+            "args": ["--debug", "--verbose", "--no-convcheck", "--no-save_model",  "--n_layers", "1", "--n_hid", "10", "--max_epochs", "1000", "--w_bc", "0.0", "--nx_train", "11", "--ny_train", "11", "--problem", "eplasma1"]
         }
     ]
 }
