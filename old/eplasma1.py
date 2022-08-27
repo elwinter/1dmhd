@@ -27,7 +27,7 @@ import tensorflow as tf
 
 
 # Names of dependent variables.
-variable_names = ["n1", "u1x"]
+variable_names = ["n1", "u1x", "E1x"]
 
 # Number of dependent variables.
 n_var = len(variable_names)
@@ -51,7 +51,7 @@ t1 = 1.0
 # Ambient temperature (normalized to unit physical constants).
 T = 1.0
 
-# Wavelength and wavenumber of initial density/velocity/Ex perturbations.
+# Wavelength and x-wavenumber of initial density/velocity/Ex perturbations.
 wavelength = 1.0
 kx = 2*np.pi/wavelength
 
@@ -153,6 +153,9 @@ def electron_plasma_wave_phase_speed(n:float, T:float, k:float):
 # Compute the electron plasma angular frequency.
 wp = electron_plasma_angular_frequency(n0)
 
+# Compute the electron plasma wave angular frequency.
+w = electron_plasma_wave_angular_frequency(n0, T, kx)
+
 # Compute the electron thermal speed.
 vth = electron_thermal_speed(T)
 
@@ -161,11 +164,12 @@ vphase = electron_plasma_wave_phase_speed(n0, T, kx)
 
 # Ambient x-velocity and perturbation amplitude at t = 0, for all x.
 u0x = 0.0
-u1x0 = kb*gamma*T*n10/(me*vphase*n0)
+u1x0 = w*n10/(kx*n0)
 
-# Ambient x-component of electric field and perturbation amplitude at t = 0, for all x.
-# E0x = 0.0
-# E1x0 = 0.1
+# Ambient x-component of electric field and perturbation amplitude at t = 0,
+# for all x.
+E0x = 0.0
+E1x0 = e*n10/(kb*eps0)
 
 
 def create_training_data(nx:int, nt:int):
@@ -236,22 +240,22 @@ def compute_boundary_conditions(xt:np.ndarray):
         if np.isclose(x, x0):
             # Periodic perturbation at x = x0.
             bc[i, :] = [
-                n10*np.sin(kx*x0 - w*t),
-                u1x0*np.sin(kx*x0 - w*t),
-                # E1x0*np.sin(kx*x0 - w*t + np.pi/2),
+                n10 *np.sin(kx*x - w*t),
+                u1x0*np.sin(kx*x - w*t),
+                E1x0*np.sin(kx*x - w*t + np.pi/2),
             ]
         elif np.isclose(x, x1):
             # Periodic perturbation at x = x1, same as at x = x0.
             bc[i, :] = [
-                n10*np.sin(kx*x1 - w*t),
-                u1x0*np.sin(kx*x1 - w*t),
-                # E1x0*np.sin(kx*x1 - w*t + np.pi/2),
+                n10 *np.sin(kx*x - w*t),
+                u1x0*np.sin(kx*x - w*t),
+                E1x0*np.sin(kx*x - w*t + np.pi/2),
             ]
         elif np.isclose(t, t0):
             bc[i, :] = [
-                n10*np.sin(kx*x - w*t0),
-                u1x0*np.sin(kx*x - w*t0),
-                # E1x0*np.sin(kx*x - w*t0 + np.pi/2),
+                n10 *np.sin(kx*x - w*t),
+                u1x0*np.sin(kx*x - w*t),
+                E1x0*np.sin(kx*x - w*t + np.pi/2),
             ]
         else:
             raise ValueError
@@ -285,7 +289,7 @@ def pde_n1(xt, Y1, del_Y1):
     # x = tf.reshape(xt[:, 0], (n, 1))
     # t = tf.reshape(xt[:, 1], (n, 1))
     # (n1, u1x) = Y1
-    (del_n1, del_u1x) = del_Y1
+    (del_n1, del_u1x, del_E1x) = del_Y1
     # dn1_dx = tf.reshape(del_n1[:, 0], (n, 1))
     dn1_dt = tf.reshape(del_n1[:, 1], (n, 1))
     du1x_dx = tf.reshape(del_u1x[:, 0], (n, 1))
@@ -323,8 +327,8 @@ def pde_u1x(xt, Y1, del_Y1):
     # Each of these Tensors is shape (n, 1).
     # x = tf.reshape(xt[:, 0], (n, 1))
     # t = tf.reshape(xt[:, 1], (n, 1))
-    # (n1, u1x) = Y1
-    (del_n1, del_u1x) = del_Y1
+    (n1, u1x, E1x) = Y1
+    (del_n1, del_u1x, del_E1x) = del_Y1
     dn1_dx = tf.reshape(del_n1[:, 0], (n, 1))
     # dn1_dt = tf.reshape(del_n1[:, 1], (n, 1))
     # du1x_dx = tf.reshape(del_u1x[:, 0], (n, 1))
@@ -332,56 +336,53 @@ def pde_u1x(xt, Y1, del_Y1):
     # dE1x_dx = tf.reshape(del_E1x[:, 0], (n, 1))
     # dE1x_dt = tf.reshape(del_E1x[:, 1], (n, 1))
 
-    # Compute the presure derivative from the density derivative.
-    dP1_dx = gamma*P0/n0*dn1_dx
-
     # G is a Tensor of shape (n, 1).
-    G = n0*du1x_dt + 1/me*dP1_dx
+    G = du1x_dt + e/me*E1x + gamma*kb*T/(me*n0)*dn1_dx
     return G
 
 
 # @tf.function
-# def pde_E1x(xt, Y1, del_Y1):
-#     """Differential equation for E1x.
+def pde_E1x(xt, Y1, del_Y1):
+    """Differential equation for E1x.
 
-#     Evaluate the differential equation for E1x (x-component of electric
-#     field perturbation).
+    Evaluate the differential equation for E1x (x-component of electric
+    field perturbation).
 
-#     Parameters
-#     ----------
-#     xt : tf.Variable, shape (n, 2)
-#         Values of (x, t) at each training point.
-#     Y1 : list of n_var tf.Tensor, each shape (n, 1)
-#         Perturbations of dependent variables at each training point.
-#     del_Y1 : list of n_var tf.Tensor, each shape (n, 2)
-#         Values of gradients of Y1 wrt (x, t) at each training point.
+    Parameters
+    ----------
+    xt : tf.Variable, shape (n, 2)
+        Values of (x, t) at each training point.
+    Y1 : list of n_var tf.Tensor, each shape (n, 1)
+        Perturbations of dependent variables at each training point.
+    del_Y1 : list of n_var tf.Tensor, each shape (n, 2)
+        Values of gradients of Y1 wrt (x, t) at each training point.
 
-#     Returns
-#     -------
-#     G : tf.Tensor, shape(n, 1)
-#         Value of differential equation at each training point.
-#     """
-#     n = xt.shape[0]
-#     # Each of these Tensors is shape (n, 1).
-#     # x = tf.reshape(xt[:, 0], (n, 1))
-#     # t = tf.reshape(xt[:, 1], (n, 1))
-#     (n1, u1x, E1x) = Y1
-#     (del_n1, del_u1x, del_E1x) = del_Y1
-#     # dn1_dx = tf.reshape(del_n1[:, 0], (n, 1))
-#     # dn1_dt = tf.reshape(del_n1[:, 1], (n, 1))
-#     # du1x_dx = tf.reshape(del_u1x[:, 0], (n, 1))
-#     # du1x_dt = tf.reshape(del_u1x[:, 1], (n, 1))
-#     dE1x_dx = tf.reshape(del_E1x[:, 0], (n, 1))
-#     # dE1x_dt = tf.reshape(del_E1x[:, 1], (n, 1))
+    Returns
+    -------
+    G : tf.Tensor, shape(n, 1)
+        Value of differential equation at each training point.
+    """
+    n = xt.shape[0]
+    # Each of these Tensors is shape (n, 1).
+    # x = tf.reshape(xt[:, 0], (n, 1))
+    # t = tf.reshape(xt[:, 1], (n, 1))
+    (n1, u1x, E1x) = Y1
+    (del_n1, del_u1x, del_E1x) = del_Y1
+    # dn1_dx = tf.reshape(del_n1[:, 0], (n, 1))
+    # dn1_dt = tf.reshape(del_n1[:, 1], (n, 1))
+    # du1x_dx = tf.reshape(del_u1x[:, 0], (n, 1))
+    # du1x_dt = tf.reshape(del_u1x[:, 1], (n, 1))
+    dE1x_dx = tf.reshape(del_E1x[:, 0], (n, 1))
+    # dE1x_dt = tf.reshape(del_E1x[:, 1], (n, 1))
 
-#     # G is a Tensor of shape (n, 1).
-#     G = dE1x_dx + e/eps0*n1
-#     return G
+    # G is a Tensor of shape (n, 1).
+    G = dE1x_dx + e/eps0*n1
+    return G
 
 
 # Make a list of all of the differential equations.
 differential_equations = [
     pde_n1,
     pde_u1x,
-    # pde_E1x,
+    pde_E1x,
 ]

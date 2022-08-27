@@ -130,30 +130,3 @@ dmypy.json
 
 # Visual Studio Code data
 # .vscode/
-
-# Test outputs
-alfven_wave/
-alfven_wave2/
-alfven_wave3/
-cosine/
-cubic/
-eplasma1/
-exponential/
-lagaris01/
-lagaris02/
-lagaris03bvp/
-lagaris03ivp/
-lagaris04/
-lagaris05/
-lagaris06/
-linear/
-logarithmic/
-quadratic/
-quadratic2bvp/
-quadratic2ivp/
-sine/
-slow_wave/
-static/
-static2/
-static3/
-transport/
